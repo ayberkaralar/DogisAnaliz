@@ -1,4 +1,4 @@
-﻿using System.Text.Json;
+using System.Text.Json;
 using DogisAnaliz.Data;
 using DogisAnaliz.Models;
 using Microsoft.EntityFrameworkCore;
@@ -25,14 +25,20 @@ public class FootballApiService
         var response = await _httpClient.GetAsync($"fixtures?league={apiLeagueId}&season={seasonYear}&status=FT");
 
         if (!response.IsSuccessStatusCode)
+        {
+            Console.WriteLine($"[API Hata] HTTP {(int)response.StatusCode}: {response.ReasonPhrase}");
             return 0;
+        }
 
         var json = await response.Content.ReadAsStringAsync();
         using var doc = JsonDocument.Parse(json);
         var root = doc.RootElement;
 
         if (!root.TryGetProperty("response", out var fixtures) || fixtures.GetArrayLength() == 0)
+        {
+            Console.WriteLine($"[Bilgi] {seasonYear}-{seasonYear + 1} sezonu için tamamlanmış maç (FT) bulunamadı. Sezon henüz başlamış veya veri yok.");
             return 0;
+        }
 
         var existingTeams = await _context.Teams.ToDictionaryAsync(t => t.Name, t => t);
         var existingSeasons = await _context.Seasons.ToDictionaryAsync(s => s.SeasonName, s => s);
@@ -56,10 +62,23 @@ public class FootballApiService
                 string homeTeamName = teamsData.GetProperty("home").GetProperty("name").GetString()!;
                 string awayTeamName = teamsData.GetProperty("away").GetProperty("name").GetString()!;
 
-                int htHome = scoreData.GetProperty("halftime").GetProperty("home").GetInt32();
-                int htAway = scoreData.GetProperty("halftime").GetProperty("away").GetInt32();
-                int ftHome = scoreData.GetProperty("fulltime").GetProperty("home").GetInt32();
-                int ftAway = scoreData.GetProperty("fulltime").GetProperty("away").GetInt32();
+                var htHomeEl = scoreData.GetProperty("halftime").GetProperty("home");
+                var htAwayEl = scoreData.GetProperty("halftime").GetProperty("away");
+                var ftHomeEl = scoreData.GetProperty("fulltime").GetProperty("home");
+                var ftAwayEl = scoreData.GetProperty("fulltime").GetProperty("away");
+
+                // Null skor = maç tamamlanmamış veya veri eksik, bu maçı atla
+                if (htHomeEl.ValueKind == JsonValueKind.Null || htAwayEl.ValueKind == JsonValueKind.Null ||
+                    ftHomeEl.ValueKind == JsonValueKind.Null || ftAwayEl.ValueKind == JsonValueKind.Null)
+                {
+                    Console.WriteLine($"[Atlandı] Skor verisi null olan maç geçildi (fixture id: {fixture.GetProperty("id").GetInt32()})");
+                    continue;
+                }
+
+                int htHome = htHomeEl.GetInt32();
+                int htAway = htAwayEl.GetInt32();
+                int ftHome = ftHomeEl.GetInt32();
+                int ftAway = ftAwayEl.GetInt32();
 
                 // Hafta bilgisini al (Örn: "Regular Season - 1" -> 1)
                 string roundStr = leagueData.GetProperty("round").GetString() ?? "";

@@ -1,0 +1,244 @@
+@model DogisAnaliz.Models.DogiViewModel
+@{
+    ViewData["Title"] = "Dogi Analizi";
+}
+
+<style>
+    .dogi-header { background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%); color: white; border-radius: 12px; padding: 24px 28px; margin-bottom: 24px; }
+    .dogi-title  { font-size: 2rem; font-weight: 700; letter-spacing: 1px; margin: 0; }
+    .dogi-sub    { font-size: 0.9rem; opacity: 0.7; margin: 4px 0 0; }
+    .kpi-card    { border-radius: 10px; padding: 18px 20px; color: white; text-align: center; }
+    .kpi-card .kpi-num { font-size: 2rem; font-weight: 700; line-height: 1; }
+    .kpi-card .kpi-lbl { font-size: 0.78rem; opacity: 0.85; margin-top: 4px; text-transform: uppercase; letter-spacing: .5px; }
+    .bg-dogi-total   { background: #4361ee; }
+    .bg-dogi-surprise{ background: #2dc653; }
+    .bg-dogi-normal  { background: #e63946; }
+    .bg-dogi-pending { background: #f4a261; }
+    .bg-dogi-rate    { background: #7209b7; }
+
+    .pending-card { background: #fff8e7; border: 2px solid #f4a261; border-radius: 10px; padding: 16px 20px; margin-bottom: 12px; }
+    .pending-title{ font-weight: 700; color: #e07b00; font-size: 1rem; margin-bottom: 10px; }
+    .match-row    { display: flex; align-items: center; gap: 8px; font-size: 0.85rem; margin-bottom: 6px; }
+    .match-badge  { border-radius: 6px; padding: 2px 8px; font-weight: 700; font-size: 0.82rem; white-space: nowrap; }
+    .badge-high   { background: #e63946; color: white; }
+    .badge-draw   { background: #4361ee; color: white; }
+    .badge-arrow  { color: #aaa; font-size: 1.1rem; }
+    .badge-pending{ background: #f4a261; color: white; }
+
+    .result-badge { border-radius: 5px; padding: 2px 10px; font-size: 0.78rem; font-weight: 700; }
+    .res-surprise { background: #d4f5dc; color: #1a7431; }
+    .res-normal   { background: #fde8e8; color: #c0392b; }
+    .res-pending  { background: #fff3cd; color: #856404; }
+
+    .filter-bar   { background: #f8f9fa; border-radius: 10px; padding: 14px 18px; margin-bottom: 20px; display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+    .filter-bar select, .filter-bar button { border-radius: 7px; font-size: 0.85rem; }
+
+    table { font-size: 0.83rem; }
+    th    { background: #1a1a2e; color: white; white-space: nowrap; }
+    td    { vertical-align: middle; }
+    .pattern-arrow { color: #aaa; }
+</style>
+
+<div class="dogi-header">
+    <div class="dogi-title">🐕 Dogi Analizi</div>
+    <div class="dogi-sub">Her takımın ardışık maçlarında <strong>[5-1/1-5] → [2-2]</strong> veya <strong>[2-2] → [5-1/1-5]</strong> sürpriz pattern tespiti</div>
+</div>
+
+<!-- KPI Kartlar -->
+<div class="row g-3 mb-4">
+    <div class="col-6 col-md">
+        <div class="kpi-card bg-dogi-total">
+            <div class="kpi-num">@Model.TotalPatterns</div>
+            <div class="kpi-lbl">Toplam Pattern</div>
+        </div>
+    </div>
+    <div class="col-6 col-md">
+        <div class="kpi-card bg-dogi-surprise">
+            <div class="kpi-num">@Model.SurpriseCount</div>
+            <div class="kpi-lbl">Sürpriz Bitti</div>
+        </div>
+    </div>
+    <div class="col-6 col-md">
+        <div class="kpi-card bg-dogi-normal">
+            <div class="kpi-num">@Model.NormalCount</div>
+            <div class="kpi-lbl">Normal Bitti</div>
+        </div>
+    </div>
+    <div class="col-6 col-md">
+        <div class="kpi-card bg-dogi-pending">
+            <div class="kpi-num">@Model.PendingCount</div>
+            <div class="kpi-lbl">Bekliyor</div>
+        </div>
+    </div>
+    <div class="col-6 col-md">
+        <div class="kpi-card bg-dogi-rate">
+            <div class="kpi-num">%@Model.SurpriseRate</div>
+            <div class="kpi-lbl">Sürpriz Oranı</div>
+        </div>
+    </div>
+</div>
+
+<!-- PENDING UYARILAR -->
+@if (Model.PendingAlerts.Any())
+{
+    <div class="mb-4">
+        <h5 class="fw-bold mb-3">⚠️ Aktif Dogi Uyarıları <span class="badge bg-warning text-dark">@Model.PendingAlerts.Count</span></h5>
+        <div class="row g-3">
+            @foreach (var p in Model.PendingAlerts)
+            {
+                <div class="col-md-6 col-lg-4">
+                    <div class="pending-card">
+                        <div class="pending-title">🐕 @p.TeamName <small class="text-muted fw-normal">— @p.LeagueName</small></div>
+                        <div class="match-row">
+                            <span class="match-badge @(p.PatternType == "HIGH_DRAW" ? "badge-high" : "badge-draw")">
+                                @(p.PatternType == "HIGH_DRAW" ? "5-1/1-5" : "2-2")
+                            </span>
+                            <small class="text-muted">@p.Match1Teams</small>
+                            <small class="text-muted">H.@p.Match1Week</small>
+                        </div>
+                        <div class="match-row">
+                            <span class="match-badge @(p.PatternType == "DRAW_HIGH" ? "badge-high" : "badge-draw")">
+                                @(p.PatternType == "DRAW_HIGH" ? "5-1/1-5" : "2-2")
+                            </span>
+                            <small class="text-muted">@p.Match2Teams</small>
+                            <small class="text-muted">H.@p.Match2Week</small>
+                        </div>
+                        <div class="match-row mt-2">
+                            <span class="match-badge badge-pending">⚡ DOGI ADAYI</span>
+                            <small class="text-muted">@(p.Match3Teams ?? "Sonraki maç bekleniyor")</small>
+                            @if (p.Match3Week.HasValue)
+                            {
+                                <small class="text-muted">H.@p.Match3Week</small>
+                            }
+                        </div>
+                    </div>
+                </div>
+            }
+        </div>
+    </div>
+}
+
+<!-- FİLTRE BARI -->
+<form method="get" action="/Dogi">
+    <div class="filter-bar">
+        <select name="leagueId" class="form-select form-select-sm" style="width:180px;" onchange="this.form.submit()">
+            <option value="">— Tüm Ligler —</option>
+            @foreach (var l in Model.Leagues)
+            {
+                if (Model.SelectedLeagueId == l.Id)
+                {
+                    <option value="@l.Id" selected>@l.Name</option>
+                }
+                else
+                {
+                    <option value="@l.Id">@l.Name</option>
+                }
+            }
+        </select>
+        <select name="seasonId" class="form-select form-select-sm" style="width:150px;" onchange="this.form.submit()">
+            <option value="">— Tüm Sezonlar —</option>
+            @foreach (var s in Model.Seasons)
+            {
+                if (Model.SelectedSeasonId == s.Id)
+                {
+                    <option value="@s.Id" selected>@s.SeasonName</option>
+                }
+                else
+                {
+                    <option value="@s.Id">@s.SeasonName</option>
+                }
+            }
+        </select>
+        <select name="result" class="form-select form-select-sm" style="width:150px;" onchange="this.form.submit()">
+            @if (Model.SelectedResult == "ALL") { <option value="ALL" selected>Tüm Sonuçlar</option> } else { <option value="ALL">Tüm Sonuçlar</option> }
+            @if (Model.SelectedResult == "SURPRISE") { <option value="SURPRISE" selected>✅ Sürpriz</option> } else { <option value="SURPRISE">✅ Sürpriz</option> }
+            @if (Model.SelectedResult == "NORMAL") { <option value="NORMAL" selected>❌ Normal</option> } else { <option value="NORMAL">❌ Normal</option> }
+        </select>
+        @if (Model.SelectedLeagueId.HasValue || Model.SelectedSeasonId.HasValue || Model.SelectedResult != "ALL")
+        {
+            <a href="/Dogi" class="btn btn-sm btn-outline-secondary">Temizle</a>
+        }
+        <small class="text-muted ms-auto">@Model.Patterns.Count kayıt</small>
+    </div>
+</form>
+
+<!-- GEÇMİŞ PATTERN TABLOSU -->
+@if (!Model.Patterns.Any())
+{
+    <div class="text-center text-muted py-5">
+        <div style="font-size:3rem;">🐕</div>
+        <p>Bu filtre için dogi pattern bulunamadı.</p>
+    </div>
+}
+else
+{
+    <div class="table-responsive">
+        <table class="table table-bordered table-hover table-sm">
+            <thead>
+                <tr>
+                    <th>Lig</th>
+                    <th>Sezon</th>
+                    <th>Takım</th>
+                    <th>1. Tetikleyici</th>
+                    <th class="pattern-arrow text-center">→</th>
+                    <th>2. Tetikleyici</th>
+                    <th class="pattern-arrow text-center">→</th>
+                    <th>Uyarı Maçı (3.)</th>
+                    <th>Sonuç</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var p in Model.Patterns)
+                {
+                    <tr>
+                        <td>@p.LeagueName</td>
+                        <td>@p.SeasonName</td>
+                        <td><strong>@p.TeamName</strong></td>
+                        <td>
+                            <span class="match-badge @(p.PatternType == "HIGH_DRAW" ? "badge-high" : "badge-draw")">@p.Match1Score</span>
+                            <br/><small class="text-muted">@p.Match1Teams</small>
+                            <br/><small class="text-muted">H.@p.Match1Week — @p.Match1Date.ToString("dd.MM.yy")</small>
+                        </td>
+                        <td class="text-center text-muted">→</td>
+                        <td>
+                            <span class="match-badge @(p.PatternType == "DRAW_HIGH" ? "badge-high" : "badge-draw")">@p.Match2Score</span>
+                            <br/><small class="text-muted">@p.Match2Teams</small>
+                            <br/><small class="text-muted">H.@p.Match2Week — @p.Match2Date.ToString("dd.MM.yy")</small>
+                        </td>
+                        <td class="text-center text-muted">→</td>
+                        <td>
+                            @if (p.Match3Teams != null)
+                            {
+                                <strong>@p.Match3Score</strong>
+                                <br/><small class="text-muted">@p.Match3Teams</small>
+                                <br/><small class="text-muted">H.@p.Match3Week — @p.Match3Date?.ToString("dd.MM.yy")</small>
+                            }
+                            else
+                            {
+                                <span class="text-muted">—</span>
+                            }
+                        </td>
+                        <td>
+                            @if (p.AlertResult == "SURPRISE")
+                            {
+                                <span class="result-badge res-surprise">✅ SÜRPRIZ</span>
+                                @if (!string.IsNullOrEmpty(p.Match3SurpriseType))
+                                {
+                                    <br/><small class="text-muted">@p.Match3SurpriseType</small>
+                                }
+                            }
+                            else if (p.AlertResult == "NORMAL")
+                            {
+                                <span class="result-badge res-normal">❌ NORMAL</span>
+                            }
+                            else
+                            {
+                                <span class="result-badge res-pending">⏳ BEKLIYOR</span>
+                            }
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+}

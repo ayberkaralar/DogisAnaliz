@@ -1,4 +1,4 @@
-﻿using DogisAnaliz.Models;
+using DogisAnaliz.Models;
 using Microsoft.EntityFrameworkCore;
 
 namespace DogisAnaliz.Data;
@@ -13,6 +13,7 @@ public class AppDbContext : DbContext
     public DbSet<Match> Matches => Set<Match>();
     public DbSet<MatchSurprise> MatchSurprises => Set<MatchSurprise>();
     public DbSet<MatchDetail> MatchDetails => Set<MatchDetail>();
+    public DbSet<DogiPattern> DogiPatterns => Set<DogiPattern>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -62,5 +63,50 @@ public class AppDbContext : DbContext
 
         modelBuilder.Entity<MatchSurprise>()
             .HasIndex(ms => ms.SurpriseType);
+
+        // DogiPattern FK konfigürasyonları (cascade çakışmasını önlemek için)
+        modelBuilder.Entity<DogiPattern>()
+            .HasOne(d => d.TriggerMatch1)
+            .WithMany()
+            .HasForeignKey(d => d.TriggerMatch1Id)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        modelBuilder.Entity<DogiPattern>()
+            .HasOne(d => d.TriggerMatch2)
+            .WithMany()
+            .HasForeignKey(d => d.TriggerMatch2Id)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        modelBuilder.Entity<DogiPattern>()
+            .HasOne(d => d.AlertMatch)
+            .WithMany()
+            .HasForeignKey(d => d.AlertMatchId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        modelBuilder.Entity<DogiPattern>()
+            .HasOne(d => d.Team)
+            .WithMany()
+            .HasForeignKey(d => d.TeamId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        modelBuilder.Entity<DogiPattern>()
+            .HasOne(d => d.League)
+            .WithMany()
+            .HasForeignKey(d => d.LeagueId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        modelBuilder.Entity<DogiPattern>()
+            .HasOne(d => d.Season)
+            .WithMany()
+            .HasForeignKey(d => d.SeasonId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        // Aynı takım için aynı iki tetikleyici maç birden fazla kaydedilmesin
+        modelBuilder.Entity<DogiPattern>()
+            .HasIndex(d => new { d.TriggerMatch1Id, d.TriggerMatch2Id, d.TeamId })
+            .IsUnique();
+
+        modelBuilder.Entity<DogiPattern>()
+            .HasIndex(d => d.AlertResult);
     }
 }

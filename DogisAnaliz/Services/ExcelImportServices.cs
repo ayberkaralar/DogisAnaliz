@@ -1,4 +1,4 @@
-﻿using System.Data;
+using System.Data;
 using System.Text;
 using System.Text.RegularExpressions;
 using DogisAnaliz.Data;
@@ -18,7 +18,8 @@ public class ExcelImportService
         Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
     }
 
-    public async Task<int> ImportExcelAsync(string filePath, string leagueName, string seasonName)
+    public async Task<(int Imported, bool AlreadyExists)> ImportExcelAsync(
+        string filePath, string leagueName, string country, string seasonName, int startYear, int endYear)
     {
         if (!File.Exists(filePath))
             throw new FileNotFoundException($"Excel dosyası bulunamadı: {filePath}");
@@ -38,7 +39,7 @@ public class ExcelImportService
         var season = await _context.Seasons.FirstOrDefaultAsync(s => s.SeasonName == seasonName);
         if (season == null)
         {
-            season = new Season { SeasonName = seasonName, StartYear = 2025, EndYear = 2026 };
+            season = new Season { SeasonName = seasonName, StartYear = startYear, EndYear = endYear };
             _context.Seasons.Add(season);
             await _context.SaveChangesAsync();
         }
@@ -47,12 +48,18 @@ public class ExcelImportService
         var league = await _context.Leagues.FirstOrDefaultAsync(l => l.Name == leagueName);
         if (league == null)
         {
-            league = new League { Name = leagueName, Country = "Almanya" };
+            league = new League { Name = leagueName, Country = country };
             _context.Leagues.Add(league);
             await _context.SaveChangesAsync();
         }
 
-        // 3. Satırları İçe Aktar
+        // 3. ÇELİŞKİ KONTROLÜ — Bu lig+sezon için zaten veri var mı?
+        bool alreadyExists = await _context.Matches
+            .AnyAsync(m => m.LeagueId == league.Id && m.SeasonId == season.Id);
+        if (alreadyExists)
+            return (0, true);
+
+        // 4. Satırları İçe Aktar
         foreach (DataRow row in table.Rows)
         {
             try
@@ -111,7 +118,7 @@ public class ExcelImportService
         }
 
         await _context.SaveChangesAsync();
-        return importedCount;
+        return (importedCount, false);
     }
 
     private int ExtractWeekNumber(string weekText)
