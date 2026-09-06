@@ -1,0 +1,131 @@
+@using DogisAnaliz.Controllers
+@model List<SyncStatusRow>
+@{
+    ViewData["Title"] = "Veri Çekme Yönetimi";
+    var leagues = Model.Select(r => r.LeagueName).Distinct().ToList();
+    var seasons = Model.Select(r => r.SeasonYear).Distinct().OrderBy(y => y).ToList();
+}
+
+<style>
+    .sync-header { background: linear-gradient(135deg,#1e3a5f,#2563eb); color:#fff; border-radius:12px; padding:20px 24px; margin-bottom:24px; }
+    .sync-table  { width:100%; border-collapse:collapse; font-size:0.88rem; }
+    .sync-table th { background:#1e293b; color:#94a3b8; padding:10px 14px; text-align:center; font-weight:700; white-space:nowrap; }
+    .sync-table th:first-child { text-align:left; }
+    .sync-table td { padding:8px 10px; border-bottom:1px solid #e2e8f0; vertical-align:middle; text-align:center; }
+    .sync-table td:first-child { text-align:left; font-weight:600; white-space:nowrap; }
+    .sync-table tr:hover td { background:#f8fafc; }
+    .cell-ok   { background:#dcfce7; color:#166534; font-weight:700; border-radius:6px; padding:3px 8px; font-size:0.8rem; white-space:nowrap; }
+    .cell-miss { background:#fee2e2; color:#991b1b; font-weight:700; border-radius:6px; padding:3px 8px; font-size:0.8rem; }
+    .cell-active { background:#fef9c3; color:#713f12; font-weight:700; border-radius:6px; padding:3px 8px; font-size:0.8rem; }
+    .btn-sync  { background:#2563eb; color:#fff; border:none; border-radius:6px; padding:3px 10px; font-size:0.78rem; cursor:pointer; white-space:nowrap; }
+    .btn-sync:hover { background:#1d4ed8; }
+    .btn-all   { background:#7c3aed; color:#fff; border:none; border-radius:6px; padding:4px 12px; font-size:0.8rem; cursor:pointer; }
+    .btn-all:hover { background:#6d28d9; }
+    .league-name { font-size:0.95rem; color:#1e293b; }
+    .alert-result { border-radius:10px; padding:12px 18px; margin-bottom:16px; font-weight:600; }
+    .season-active-badge { font-size:0.7rem; background:#f59e0b; color:#fff; border-radius:4px; padding:1px 5px; margin-left:4px; }
+</style>
+
+<div class="sync-header">
+    <h4 class="mb-1">📡 Veri Çekme Yönetimi</h4>
+    <small>api-football.com Pro Plan — 9 Lig, 2020-2026 sezonları</small>
+</div>
+
+@if (ViewBag.SyncResult != null)
+{
+    <div class="alert-result" style="background:@(ViewBag.SyncResult.ToString().StartsWith("✅") ? "#dcfce7" : "#fee2e2")">
+        @ViewBag.SyncResult
+    </div>
+}
+
+<div class="alert alert-info py-2 mb-3" style="font-size:0.88rem;">
+    ⚡ <strong>Tek Sezon:</strong> ilgili hücredeki "Çek" butonuna basın. &nbsp;|&nbsp;
+    🔄 <strong>Tüm Sezonlar:</strong> lig adının yanındaki "Tümünü Çek" butonuna basın. &nbsp;|&nbsp;
+    🟢 Yeşil = DB'de mevcut &nbsp; 🔴 Kırmızı = eksik &nbsp; 🟡 Sarı = aktif sezon
+</div>
+
+<div class="table-responsive">
+    <table class="sync-table shadow-sm">
+        <thead>
+            <tr>
+                <th>Lig</th>
+                @foreach (var sy in seasons)
+                {
+                    <th>
+                        @sy-@(sy+1)
+                        @if (sy == 2026) { <span class="season-active-badge">AKTİF</span> }
+                    </th>
+                }
+                <th>Toplu İşlem</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var league in leagues)
+            {
+                var leagueRows = Model.Where(r => r.LeagueName == league).OrderBy(r => r.SeasonYear).ToList();
+                var firstRow   = leagueRows.First();
+                var totalInDb  = leagueRows.Sum(r => r.MatchCount);
+
+                <tr>
+                    <!-- Lig adı -->
+                    <td>
+                        <span class="league-name">@league</span>
+                        <div class="text-muted" style="font-size:0.75rem;">@firstRow.Country | ID: @firstRow.ApiId</div>
+                        <div class="text-muted" style="font-size:0.75rem;">Toplam DB: <strong>@totalInDb maç</strong></div>
+                    </td>
+
+                    <!-- Her sezon için hücre -->
+                    @foreach (var row in leagueRows)
+                    {
+                        <td>
+                            @if (row.IsSynced && row.IsActive)
+                            {
+                                <div><span class="cell-active">🟡 @row.MatchCount maç</span></div>
+                                <form method="post" action="/Sync/Season" class="mt-1">
+                                    @Html.AntiForgeryToken()
+                                    <input type="hidden" name="apiLeagueId" value="@row.ApiId" />
+                                    <input type="hidden" name="seasonYear"  value="@row.SeasonYear" />
+                                    <input type="hidden" name="leagueName"  value="@row.LeagueName" />
+                                    <button type="submit" class="btn-sync" title="Yeni maçları çek">🔄 Güncelle</button>
+                                </form>
+                            }
+                            else if (row.IsSynced)
+                            {
+                                <span class="cell-ok">✅ @row.MatchCount maç</span>
+                            }
+                            else
+                            {
+                                <div><span class="cell-miss">❌ Yok</span></div>
+                                <form method="post" action="/Sync/Season" class="mt-1">
+                                    @Html.AntiForgeryToken()
+                                    <input type="hidden" name="apiLeagueId" value="@row.ApiId" />
+                                    <input type="hidden" name="seasonYear"  value="@row.SeasonYear" />
+                                    <input type="hidden" name="leagueName"  value="@row.LeagueName" />
+                                    <button type="submit" class="btn-sync">⬇ Çek</button>
+                                </form>
+                            }
+                        </td>
+                    }
+
+                    <!-- Toplu işlem -->
+                    <td>
+                        <form method="post" action="/Sync/LeagueAll">
+                            @Html.AntiForgeryToken()
+                            <input type="hidden" name="apiLeagueId" value="@firstRow.ApiId" />
+                            <input type="hidden" name="leagueName"  value="@league" />
+                            <button type="submit" class="btn-all"
+                                    onclick="return confirm('@league için TÜM sezonlar (2020-2026) çekilecek. Mevcut olanlar atlanır. Onaylıyor musunuz?')">
+                                🔄 Tümünü Çek
+                            </button>
+                        </form>
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+</div>
+
+<div class="mt-3 text-muted" style="font-size:0.82rem;">
+    ⚠️ <strong>Not:</strong> Bir sezonu çekmek ~5-15 saniye sürebilir (380+ maç). "Tümünü Çek" 30-90 saniye sürebilir, lütfen bekleyin.
+    Mevcut maçlar zaten DB'de varsa otomatik atlanır.
+</div>

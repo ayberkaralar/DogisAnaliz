@@ -51,11 +51,7 @@ public class OpenFootballService
         ("2022-23", "pt.1", "Primeira Liga",  "Portugal", "2022-2023", 2022, 2023),
         ("2023-24", "pt.1", "Primeira Liga",  "Portugal", "2023-2024", 2023, 2024),
         ("2024-25", "pt.1", "Primeira Liga",  "Portugal", "2024-2025", 2024, 2025),
-
-        // ── Belçika Pro Lig — OpenFootball'da sadece 2020-21 ve 2024-25 var ──
-        // 2021-22: YOK (Excel gerekli)  |  2022-24: api-sports.io (ID: 144)
-        ("2020-21", "be.1", "Belgian Pro League", "Belgium", "2020-2021", 2020, 2021),
-        ("2024-25", "be.1", "Belgian Pro League", "Belgium", "2024-2025", 2024, 2025),
+        // Not: Belgian Pro League → Jupiler Pro League ile birleştirildi, be.1 kaldırıldı
     };
 
     public async Task<int> SyncAsync(string githubSeason, string leagueCode,

@@ -22,7 +22,10 @@ public class FootballApiService
 
     public async Task<int> SyncLeagueSeasonAsync(int apiLeagueId, int seasonYear)
     {
-        var response = await _httpClient.GetAsync($"fixtures?league={apiLeagueId}&season={seasonYear}&status=FT");
+        // Pro plan: status filtresi kaldırıldı — tüm maçlar çekilir,
+        // null skor olanlar (oynanmamış maçlar) kod içinde zaten atlanır.
+        var response = await _httpClient.GetAsync(
+            $"fixtures?league={apiLeagueId}&season={seasonYear}");
 
         if (!response.IsSuccessStatusCode)
         {

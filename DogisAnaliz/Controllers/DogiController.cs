@@ -1,5 +1,6 @@
 using DogisAnaliz.Data;
 using DogisAnaliz.Models;
+using DogisAnaliz.Services;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
@@ -8,10 +9,12 @@ namespace DogisAnaliz.Controllers;
 public class DogiController : Controller
 {
     private readonly AppDbContext _context;
+    private readonly DogiService  _dogiService;
 
-    public DogiController(AppDbContext context)
+    public DogiController(AppDbContext context, DogiService dogiService)
     {
-        _context = context;
+        _context     = context;
+        _dogiService = dogiService;
     }
 
     public async Task<IActionResult> Index(int? leagueId, int? seasonId, string result = "ALL")
@@ -103,6 +106,24 @@ public class DogiController : Controller
             .Select(ToDto).ToList();
 
         return View(vm);
+    }
+
+    // ─────────────────────────────────────────────────────────
+    // POST /Dogi/Rescan — Yeni maçlar için Dogi taramasını yenile
+    // ─────────────────────────────────────────────────────────
+    [HttpPost]
+    public async Task<IActionResult> Rescan(int? leagueId, int? seasonId)
+    {
+        var before = await _context.DogiPatterns.CountAsync();
+        await _dogiService.ScanAllAsync();
+        var after  = await _context.DogiPatterns.CountAsync();
+        int added  = after - before;
+
+        TempData["RescanResult"] = added > 0
+            ? $"✅ Tarama tamamlandı: {added} yeni Dogi pattern eklendi. Toplam: {after}"
+            : $"✅ Tarama tamamlandı: Yeni pattern bulunamadı. Toplam: {after}";
+
+        return RedirectToAction(nameof(Index), new { leagueId, seasonId });
     }
 
     private static DogiRowDto ToDto(DogiPattern d) => new()

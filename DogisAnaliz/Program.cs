@@ -44,7 +44,7 @@ using (var scope = app.Services.CreateScope())
     var leagues = new (int Id, string Name)[]
     {
         (203, "Süper Lig"),          // OpenFootball'da YOK → tüm sezonlar buradan
-        (144, "Belgian Pro League"), // 2021-22 hariç 2022-2024 buradan
+        // Not: Belçika → Jupiler Pro League zaten çalışıyor, Belgian Pro League kaldırıldı
     };
 
     int[] seasons = new int[] { 2022, 2023, 2024 };
