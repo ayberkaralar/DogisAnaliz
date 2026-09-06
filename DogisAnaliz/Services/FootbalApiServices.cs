@@ -40,7 +40,10 @@ public class FootballApiService
             return 0;
         }
 
-        var existingTeams = await _context.Teams.ToDictionaryAsync(t => t.Name, t => t);
+        // Takım dictionary'si lowercase key ile — case-insensitive eşleşme için
+        var existingTeams = await _context.Teams
+            .ToDictionaryAsync(t => t.Name.ToLower(), t => t);
+
         var existingSeasons = await _context.Seasons.ToDictionaryAsync(s => s.SeasonName, s => s);
         var existingLeagues = await _context.Leagues.ToDictionaryAsync(l => l.Name, l => l);
 
@@ -59,8 +62,10 @@ public class FootballApiService
                 string country = leagueData.GetProperty("country").GetString()!;
                 string seasonName = $"{seasonYear}-{seasonYear + 1}";
 
-                string homeTeamName = teamsData.GetProperty("home").GetProperty("name").GetString()!;
-                string awayTeamName = teamsData.GetProperty("away").GetProperty("name").GetString()!;
+                string homeTeamName = TeamNameNormalizer.Normalize(
+                    teamsData.GetProperty("home").GetProperty("name").GetString()!);
+                string awayTeamName = TeamNameNormalizer.Normalize(
+                    teamsData.GetProperty("away").GetProperty("name").GetString()!);
 
                 var htHomeEl = scoreData.GetProperty("halftime").GetProperty("home");
                 var htAwayEl = scoreData.GetProperty("halftime").GetProperty("away");
@@ -104,22 +109,22 @@ public class FootballApiService
                     existingSeasons[seasonName] = season;
                 }
 
-                // Ev Sahibi Takım
-                if (!existingTeams.TryGetValue(homeTeamName, out var homeTeam))
+                // Ev Sahibi Takım — normalize key ile ara
+                if (!existingTeams.TryGetValue(homeTeamName.ToLower(), out var homeTeam))
                 {
                     homeTeam = new Team { Name = homeTeamName };
                     _context.Teams.Add(homeTeam);
                     await _context.SaveChangesAsync();
-                    existingTeams[homeTeamName] = homeTeam;
+                    existingTeams[homeTeamName.ToLower()] = homeTeam;
                 }
 
-                // Deplasman Takımı
-                if (!existingTeams.TryGetValue(awayTeamName, out var awayTeam))
+                // Deplasman Takımı — normalize key ile ara
+                if (!existingTeams.TryGetValue(awayTeamName.ToLower(), out var awayTeam))
                 {
                     awayTeam = new Team { Name = awayTeamName };
                     _context.Teams.Add(awayTeam);
                     await _context.SaveChangesAsync();
-                    existingTeams[awayTeamName] = awayTeam;
+                    existingTeams[awayTeamName.ToLower()] = awayTeam;
                 }
 
                 DateTime rawDate = fixture.GetProperty("date").GetDateTime();

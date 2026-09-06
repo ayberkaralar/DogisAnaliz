@@ -1,0 +1,176 @@
+@{
+    ViewData["Title"] = "Takım Birleştirme";
+    var duplicates = (List<List<DogisAnaliz.Models.Team>>)ViewBag.Duplicates;
+    var allTeams   = (List<DogisAnaliz.Models.Team>)ViewBag.AllTeams;
+}
+
+<style>
+    .merge-header { background: linear-gradient(135deg, #7c2d12 0%, #c2410c 100%); color: white; border-radius: 12px; padding: 20px 24px; margin-bottom: 20px; }
+    .merge-card   { border: 1px solid #dee2e6; border-radius: 10px; padding: 16px; margin-bottom: 12px; background: #fff; }
+    .team-badge   { display: inline-block; background: #1e293b; color: #f8fafc; border-radius: 6px; padding: 4px 10px; font-size: 0.85rem; margin-right: 4px; }
+    .team-search  { width: 100%; padding: 8px 12px; border: 1px solid #ced4da; border-radius: 8px; font-size: 0.9rem; }
+    .team-list    { max-height: 200px; overflow-y: auto; border: 1px solid #dee2e6; border-radius: 8px; background: #fff; }
+    .team-item    { padding: 8px 12px; cursor: pointer; border-bottom: 1px solid #f1f5f9; font-size: 0.9rem; }
+    .team-item:hover { background: #f0f9ff; }
+    .team-item.selected { background: #dbeafe; font-weight: bold; }
+    .selected-team-box { background: #f0fdf4; border: 2px solid #86efac; border-radius: 8px; padding: 10px 14px; min-height: 42px; }
+</style>
+
+<div class="merge-header">
+    <h4 class="mb-0">🔧 Takım Birleştirme</h4>
+    <small>Duplicate takımları tespit edin ve birleştirin. Toplam takım: <strong>@ViewBag.TotalTeams</strong></small>
+</div>
+
+@if (TempData["Success"] != null)
+{
+    <div class="alert alert-success">✅ @TempData["Success"]</div>
+}
+
+<!-- ── MANUEL BİRLEŞTİRME ── -->
+<div class="merge-card mb-4">
+    <h5 class="fw-bold mb-3">🔍 Manuel Birleştirme</h5>
+    <p class="text-muted small">Otomatik tespit edilemeyen duplicate'leri buradan birleştirebilirsiniz. Arama kutusuna yazın, takımı seçin, ardından "Birleştir" butonuna basın.</p>
+
+    <div class="row g-3">
+        <!-- KORUNACAK TAKIM -->
+        <div class="col-md-5">
+            <label class="fw-semibold mb-1">✅ Korunacak Takım (doğru ad):</label>
+            <input type="text" id="searchKeep" class="team-search" placeholder="Takım adı ara..." oninput="filterTeams('keep')" />
+            <div class="team-list mt-1" id="keepList">
+                @foreach (var t in allTeams)
+                {
+                    <div class="team-item" data-id="@t.Id" data-name="@t.Name" onclick="selectTeam('keep', @t.Id, '@t.Name.Replace("'", "\\'")')">
+                        <span class="text-muted small">#@t.Id</span> @t.Name
+                    </div>
+                }
+            </div>
+            <div class="selected-team-box mt-2" id="keepBox">— seçilmedi —</div>
+        </div>
+
+        <div class="col-md-2 d-flex align-items-center justify-content-center">
+            <span class="fw-bold text-danger fs-3">←</span>
+        </div>
+
+        <!-- SİLİNECEK TAKIM -->
+        <div class="col-md-5">
+            <label class="fw-semibold mb-1">🗑 Silinecek Takım (duplicate):</label>
+            <input type="text" id="searchDelete" class="team-search" placeholder="Takım adı ara..." oninput="filterTeams('delete')" />
+            <div class="team-list mt-1" id="deleteList">
+                @foreach (var t in allTeams)
+                {
+                    <div class="team-item" data-id="@t.Id" data-name="@t.Name" onclick="selectTeam('delete', @t.Id, '@t.Name.Replace("'", "\\'")')">
+                        <span class="text-muted small">#@t.Id</span> @t.Name
+                    </div>
+                }
+            </div>
+            <div class="selected-team-box mt-2" id="deleteBox">— seçilmedi —</div>
+        </div>
+    </div>
+
+    <form method="post" action="/Admin/MergeTeam" class="mt-3" id="manualMergeForm">
+        @Html.AntiForgeryToken()
+        <input type="hidden" name="keepId"   id="keepId"   value="0" />
+        <input type="hidden" name="deleteId" id="deleteId" value="0" />
+        <button type="button" class="btn btn-danger px-4" onclick="submitMerge()">
+            🔗 Birleştir (silinecek → korunacak)
+        </button>
+        <span id="mergeWarning" class="text-danger ms-2 small d-none">Lütfen her iki takımı da seçin!</span>
+    </form>
+</div>
+
+<!-- ── OTOMATİK TESPİT EDİLEN DUPLICATE'LER ── -->
+<h5 class="fw-bold mt-4 mb-3">⚡ Otomatik Tespit Edilenler (@duplicates.Count grup)</h5>
+
+<!-- Tüm adları normalize et -->
+<form method="post" action="/Admin/NormalizeAllTeams" class="mb-3">
+    @Html.AntiForgeryToken()
+    <button type="submit" class="btn btn-warning btn-sm" onclick="return confirm('Tüm takım adları Title Case yapılacak. Emin misiniz?')">
+        🔠 Tüm Takım Adlarını Normalize Et
+    </button>
+    <small class="text-muted ms-2">Örn: "west ham" → "West Ham"</small>
+</form>
+
+@if (!duplicates.Any())
+{
+    <div class="alert alert-success">✅ Otomatik tespit: Duplicate bulunamadı.</div>
+}
+else
+{
+    foreach (var group in duplicates)
+    {
+        <div class="merge-card">
+            <div class="mb-2">
+                @foreach (var t in group)
+                {
+                    <span class="team-badge">ID:@t.Id — @t.Name</span>
+                }
+            </div>
+            <div class="d-flex flex-wrap gap-2">
+                @for (int i = 0; i < group.Count; i++)
+                {
+                    for (int j = 0; j < group.Count; j++)
+                    {
+                        if (i == j) continue;
+                        var keep = group[i];
+                        var del  = group[j];
+                        <form method="post" action="/Admin/MergeTeam" style="display:inline">
+                            @Html.AntiForgeryToken()
+                            <input type="hidden" name="keepId"   value="@keep.Id" />
+                            <input type="hidden" name="deleteId" value="@del.Id"  />
+                            <button type="submit" class="btn btn-sm btn-outline-danger">
+                                🗑 "@del.Name" sil, "@keep.Name" koru
+                            </button>
+                        </form>
+                    }
+                }
+            </div>
+        </div>
+    }
+}
+
+<script>
+    var keepId_val   = 0;
+    var deleteId_val = 0;
+
+    function filterTeams(side) {
+        var query = document.getElementById('search' + (side === 'keep' ? 'Keep' : 'Delete')).value.toLowerCase();
+        var list  = document.getElementById(side === 'keep' ? 'keepList' : 'deleteList');
+        list.querySelectorAll('.team-item').forEach(function(item) {
+            item.style.display = item.dataset.name.toLowerCase().includes(query) ? '' : 'none';
+        });
+    }
+
+    function selectTeam(side, id, name) {
+        var list = document.getElementById(side === 'keep' ? 'keepList' : 'deleteList');
+        list.querySelectorAll('.team-item').forEach(function(el) { el.classList.remove('selected'); });
+        list.querySelectorAll('.team-item[data-id="' + id + '"]').forEach(function(el) { el.classList.add('selected'); });
+
+        if (side === 'keep') {
+            keepId_val = id;
+            document.getElementById('keepBox').textContent  = '#' + id + ' — ' + name;
+            document.getElementById('keepId').value = id;
+        } else {
+            deleteId_val = id;
+            document.getElementById('deleteBox').textContent = '#' + id + ' — ' + name;
+            document.getElementById('deleteId').value = id;
+        }
+    }
+
+    function submitMerge() {
+        var keepId   = document.getElementById('keepId').value;
+        var deleteId = document.getElementById('deleteId').value;
+        if (keepId == 0 || deleteId == 0) {
+            document.getElementById('mergeWarning').classList.remove('d-none');
+            return;
+        }
+        if (keepId === deleteId) {
+            alert('Aynı takımı seçtiniz!');
+            return;
+        }
+        var keepName   = document.getElementById('keepBox').textContent;
+        var deleteName = document.getElementById('deleteBox').textContent;
+        if (confirm('"' + deleteName + '" silinecek, tüm maçları "' + keepName + '" üzerine aktarılacak. Emin misiniz?')) {
+            document.getElementById('manualMergeForm').submit();
+        }
+    }
+</script>

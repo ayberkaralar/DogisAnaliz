@@ -146,12 +146,19 @@ public class ExcelImportService
         return (0, 0);
     }
 
-    private async Task<Team> GetOrCreateTeamAsync(string teamName)
+    private async Task<Team> GetOrCreateTeamAsync(string rawName)
     {
-        var team = await _context.Teams.FirstOrDefaultAsync(t => t.Name == teamName);
+        // Normalize et: "west ham" → "West Ham", "  chelsea " → "Chelsea"
+        string normalizedName = TeamNameNormalizer.Normalize(rawName);
+        string key            = normalizedName.ToLowerInvariant();
+
+        // DB'de case-insensitive ara
+        var team = await _context.Teams
+            .FirstOrDefaultAsync(t => t.Name.ToLower() == key);
+
         if (team == null)
         {
-            team = new Team { Name = teamName };
+            team = new Team { Name = normalizedName };
             _context.Teams.Add(team);
             await _context.SaveChangesAsync();
         }

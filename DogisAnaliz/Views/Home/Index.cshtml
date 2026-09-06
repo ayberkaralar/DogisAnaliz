@@ -282,27 +282,45 @@
                     @if (Model.Teams.Any())
                     {
                         <label class="text-light fw-semibold small ms-2">Takım:</label>
-                        <select class="season-select" onchange="location = this.value;" style="min-width:180px;">
-                            <option value="@Url.Action("Index", new { leagueId = Model.SelectedLeagueId, seasonId = Model.SelectedSeasonId, teamId = (int?)null, filter = Model.SelectedFilter, sort = Model.SortOrder })">
-                                — Tüm Takımlar —
-                            </option>
-                            @foreach (var team in Model.Teams)
-                            {
-                                var isSel = team.Id == Model.SelectedTeamId;
-                                if (isSel)
+                        <div style="position:relative; display:inline-block;">
+                            <!-- Yazarak arama kutusu -->
+                            <input type="text" id="teamSearchInput" class="season-select"
+                                   placeholder="Takım ara..." autocomplete="off"
+                                   style="min-width:180px;"
+                                   value="@(Model.SelectedTeamId.HasValue ? Model.Teams.FirstOrDefault(t => t.Id == Model.SelectedTeamId)?.Name : "")"
+                                   oninput="filterTeamDropdown()" onkeydown="handleTeamKey(event)" />
+                            <!-- Dropdown seçimi (normalde gizli, arama ile filtrelenir) -->
+                            <select id="teamSelect" class="season-select" onchange="location = this.value;"
+                                    style="min-width:180px; display:none;">
+                                <option value="@Url.Action("Index", new { leagueId = Model.SelectedLeagueId, seasonId = Model.SelectedSeasonId, teamId = (int?)null, filter = Model.SelectedFilter, sort = Model.SortOrder })">
+                                    — Tüm Takımlar —
+                                </option>
+                                @foreach (var team in Model.Teams)
                                 {
-                                    <option value="@Url.Action("Index", new { leagueId = Model.SelectedLeagueId, seasonId = Model.SelectedSeasonId, teamId = team.Id, filter = Model.SelectedFilter, sort = Model.SortOrder })" selected>
-                                        @team.Name (@team.SurpriseCount)
-                                    </option>
+                                    var isSel = team.Id == Model.SelectedTeamId;
+                                    if (isSel)
+                                    {
+                                        <option value="@Url.Action("Index", new { leagueId = Model.SelectedLeagueId, seasonId = Model.SelectedSeasonId, teamId = team.Id, filter = Model.SelectedFilter, sort = Model.SortOrder })" selected
+                                                data-name="@team.Name">
+                                            @team.Name (@team.SurpriseCount)
+                                        </option>
+                                    }
+                                    else
+                                    {
+                                        <option value="@Url.Action("Index", new { leagueId = Model.SelectedLeagueId, seasonId = Model.SelectedSeasonId, teamId = team.Id, filter = Model.SelectedFilter, sort = Model.SortOrder })"
+                                                data-name="@team.Name">
+                                            @team.Name (@team.SurpriseCount)
+                                        </option>
+                                    }
                                 }
-                                else
-                                {
-                                    <option value="@Url.Action("Index", new { leagueId = Model.SelectedLeagueId, seasonId = Model.SelectedSeasonId, teamId = team.Id, filter = Model.SelectedFilter, sort = Model.SortOrder })">
-                                        @team.Name (@team.SurpriseCount)
-                                    </option>
-                                }
-                            }
-                        </select>
+                            </select>
+                            <!-- Öneri listesi -->
+                            <div id="teamSuggestions" style="
+                                display:none; position:absolute; top:100%; left:0; right:0;
+                                background:#1e293b; border:1px solid #475569; border-radius:8px;
+                                max-height:220px; overflow-y:auto; z-index:1000; min-width:220px;">
+                            </div>
+                        </div>
                         @if (Model.SelectedTeamId.HasValue)
                         {
                             <a href="@Url.Action("Index", new { leagueId = Model.SelectedLeagueId, seasonId = Model.SelectedSeasonId, filter = Model.SelectedFilter, sort = Model.SortOrder })"
@@ -436,3 +454,89 @@
         </div>
     </div>
 </div>
+
+<script>
+(function () {
+    var input       = document.getElementById('teamSearchInput');
+    var suggestions = document.getElementById('teamSuggestions');
+    var select      = document.getElementById('teamSelect');
+    if (!input || !select) return;
+
+    // Tüm takımları option'lardan topla
+    var options = Array.from(select.options).slice(1); // ilk "Tüm Takımlar" atla
+
+    function buildSuggestions(query) {
+        suggestions.innerHTML = '';
+        if (!query) { suggestions.style.display = 'none'; return; }
+
+        var filtered = options.filter(function(o) {
+            return o.dataset.name && o.dataset.name.toLowerCase().includes(query.toLowerCase());
+        });
+
+        if (filtered.length === 0) { suggestions.style.display = 'none'; return; }
+
+        // "Tüm Takımlar" seçeneği — kutu boşaldığında
+        var clearDiv = document.createElement('div');
+        clearDiv.textContent = '— Tüm Takımlar —';
+        clearDiv.style.cssText = 'padding:8px 12px; cursor:pointer; color:#94a3b8; font-size:0.85rem; border-bottom:1px solid #334155;';
+        clearDiv.onmousedown = function(e) {
+            e.preventDefault();
+            var clearOpt = select.options[0];
+            if (clearOpt) location = clearOpt.value;
+        };
+        suggestions.appendChild(clearDiv);
+
+        filtered.forEach(function(opt) {
+            var div = document.createElement('div');
+            div.textContent = opt.dataset.name;
+            div.style.cssText = 'padding:8px 12px; cursor:pointer; color:#f8fafc; font-size:0.9rem; border-bottom:1px solid #1e293b;';
+            div.onmouseover  = function() { this.style.background = '#2563eb'; };
+            div.onmouseout   = function() { this.style.background = ''; };
+            div.onmousedown  = function(e) {
+                e.preventDefault();
+                input.value = opt.dataset.name;
+                suggestions.style.display = 'none';
+                location = opt.value;
+            };
+            suggestions.appendChild(div);
+        });
+
+        suggestions.style.display = 'block';
+    }
+
+    input.addEventListener('input', function() { buildSuggestions(this.value.trim()); });
+    input.addEventListener('focus', function() { buildSuggestions(this.value.trim()); });
+    input.addEventListener('blur',  function() { setTimeout(function() { suggestions.style.display = 'none'; }, 150); });
+
+    input.addEventListener('keydown', function(e) {
+        var items = suggestions.querySelectorAll('div');
+        var active = suggestions.querySelector('div.active-suggest');
+        if (e.key === 'ArrowDown') {
+            e.preventDefault();
+            if (!active && items.length) { items[0].classList.add('active-suggest'); items[0].style.background='#2563eb'; }
+            else if (active) {
+                var next = active.nextElementSibling;
+                active.classList.remove('active-suggest'); active.style.background = '';
+                if (next) { next.classList.add('active-suggest'); next.style.background='#2563eb'; }
+            }
+        } else if (e.key === 'ArrowUp') {
+            e.preventDefault();
+            if (active) {
+                var prev = active.previousElementSibling;
+                active.classList.remove('active-suggest'); active.style.background = '';
+                if (prev) { prev.classList.add('active-suggest'); prev.style.background='#2563eb'; }
+            }
+        } else if (e.key === 'Enter') {
+            e.preventDefault();
+            if (active) { active.onmousedown({ preventDefault: function(){} }); }
+        } else if (e.key === 'Escape') {
+            suggestions.style.display = 'none';
+        }
+    });
+
+    // Dışarı tıklanınca kapat
+    document.addEventListener('click', function(e) {
+        if (e.target !== input) suggestions.style.display = 'none';
+    });
+})();
+</script>

@@ -71,7 +71,9 @@ public class OpenFootballService
             return 0;
         }
 
-        var existingTeams   = await _context.Teams.ToDictionaryAsync(t => t.Name, t => t);
+        // Takım dictionary'si lowercase key ile — case-insensitive eşleşme için
+        var existingTeams   = await _context.Teams
+            .ToDictionaryAsync(t => t.Name.ToLower(), t => t);
         var existingSeasons = await _context.Seasons.ToDictionaryAsync(s => s.SeasonName, s => s);
         var existingLeagues = await _context.Leagues.ToDictionaryAsync(l => l.Name, l => l);
 
@@ -118,19 +120,23 @@ public class OpenFootballService
                 if (DateTime.TryParse(m.Date, out var parsed))
                     matchDate = DateTime.SpecifyKind(parsed, DateTimeKind.Utc);
 
-                if (!existingTeams.TryGetValue(m.Team1, out var homeTeam))
+                // Takım adlarını normalize et
+                string team1Name = TeamNameNormalizer.Normalize(m.Team1);
+                string team2Name = TeamNameNormalizer.Normalize(m.Team2);
+
+                if (!existingTeams.TryGetValue(team1Name.ToLower(), out var homeTeam))
                 {
-                    homeTeam = new Team { Name = m.Team1 };
+                    homeTeam = new Team { Name = team1Name };
                     _context.Teams.Add(homeTeam);
                     await _context.SaveChangesAsync();
-                    existingTeams[m.Team1] = homeTeam;
+                    existingTeams[team1Name.ToLower()] = homeTeam;
                 }
-                if (!existingTeams.TryGetValue(m.Team2, out var awayTeam))
+                if (!existingTeams.TryGetValue(team2Name.ToLower(), out var awayTeam))
                 {
-                    awayTeam = new Team { Name = m.Team2 };
+                    awayTeam = new Team { Name = team2Name };
                     _context.Teams.Add(awayTeam);
                     await _context.SaveChangesAsync();
-                    existingTeams[m.Team2] = awayTeam;
+                    existingTeams[team2Name.ToLower()] = awayTeam;
                 }
 
                 bool exists = await _context.Matches.AnyAsync(x =>
