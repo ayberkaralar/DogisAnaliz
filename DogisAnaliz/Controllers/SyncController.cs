@@ -14,7 +14,7 @@ public class SyncController : Controller
     // Desteklenen ligler — API ID'leri
     public static readonly LeagueConfig[] KnownLeagues =
     {
-        // ── Büyük Ligler ──────────────────────────────────────
+        // ── Birinci Liglar ──
         new(39,  "Premier League",     "England",     true),
         new(140, "La Liga",            "Spain",       false),
         new(78,  "Bundesliga",         "Germany",     false),
@@ -24,12 +24,12 @@ public class SyncController : Controller
         new(88,  "Eredivisie",         "Netherlands", false),
         new(94,  "Primeira Liga",      "Portugal",    false),
 
-        // ── 2. Ligler ─────────────────────────────────────────
+        // ── İkinci / Diğer Liglar ──
         new(79,  "2. Bundesliga",      "Germany",     false),
         new(141, "La Liga 2",          "Spain",       false),
         new(89,  "Eerste Divisie",     "Netherlands", false),
 
-        // ── Diğer Ligler ──────────────────────────────────────
+        // ── Diğer Ülkeler ──
         new(113, "Allsvenskan",        "Sweden",      false),
         new(218, "Bundesliga",         "Austria",     false),
         new(207, "Super League",       "Switzerland", false),

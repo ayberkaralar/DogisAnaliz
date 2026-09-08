@@ -69,8 +69,8 @@
                 <tr>
                     <!-- Lig adı -->
                     <td>
-                        <span class="league-name">@league</span>
-                        <div class="text-muted" style="font-size:0.75rem;">@firstRow.Country | ID: @firstRow.ApiId</div>
+                        <span class="league-name">@LeagueDisplayHelper.ToDisplay(league, firstRow.Country)</span>
+                        <div class="text-muted" style="font-size:0.7rem;">@firstRow.Country | API: @firstRow.ApiId | <em>@league</em></div>
                         <div class="text-muted" style="font-size:0.75rem;">Toplam DB: <strong>@totalInDb maç</strong></div>
                     </td>
 

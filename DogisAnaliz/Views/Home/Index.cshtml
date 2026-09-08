@@ -249,7 +249,7 @@
                     {
                         var isActive = league.Id == Model.SelectedLeagueId ? "active" : "";
                         <a asp-action="Index" asp-route-leagueId="@league.Id" asp-route-seasonId="@Model.SelectedSeasonId" asp-route-sort="@Model.SortOrder" class="nav-league-item @isActive">
-                            <span>@league.Name</span>
+                            <span>@LeagueDisplayHelper.ToDisplay(league.Name)</span>
                             <span class="badge bg-dark border border-secondary rounded-pill">@league.SurpriseCount</span>
                         </a>
                     }
@@ -262,7 +262,7 @@
             <!-- ÜST BAŞLIK VE YIL / SEZON FİLTRESİ -->
             <div class="d-flex flex-wrap justify-content-between align-items-center mb-3 bg-dark p-3 rounded-3 border border-secondary border-opacity-25 shadow-sm">
                 <div>
-                    <h3 class="fw-bold text-white mb-0">@Model.SelectedLeagueName Sürpriz Analizi</h3>
+                    <h3 class="fw-bold text-white mb-0">@LeagueDisplayHelper.ToTurkish(Model.SelectedLeagueName) Sürpriz Analizi</h3>
                     <small class="text-secondary">Sadece 1/2, 2/1 ve +6 Gol Biten Özel Karşılaşmalar</small>
                 </div>
 

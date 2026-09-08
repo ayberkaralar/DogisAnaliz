@@ -120,7 +120,7 @@
             <div class="d-flex flex-wrap gap-2">
                 @foreach (var l in leagues)
                 {
-                    <span class="badge bg-secondary">@l.Name</span>
+                    <span class="badge bg-secondary">@LeagueDisplayHelper.ToDisplay(l.Name)</span>
                 }
             </div>
         </div>

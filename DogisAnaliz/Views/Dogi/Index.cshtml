@@ -104,7 +104,7 @@
             {
                 <div class="col-md-6 col-lg-4">
                     <div class="pending-card">
-                        <div class="pending-title">🐕 @p.TeamName <small class="text-muted fw-normal">— @p.LeagueName</small></div>
+                        <div class="pending-title">🐕 @p.TeamName <small class="text-muted fw-normal">— @LeagueDisplayHelper.ToTurkish(p.LeagueName)</small></div>
                         <div class="match-row">
                             <span class="match-badge @(p.PatternType == "HIGH_DRAW" ? "badge-high" : "badge-draw")">
                                 @(p.PatternType == "HIGH_DRAW" ? "5-1/1-5" : "2-2")
@@ -143,11 +143,11 @@
             {
                 if (Model.SelectedLeagueId == l.Id)
                 {
-                    <option value="@l.Id" selected>@l.Name</option>
+                    <option value="@l.Id" selected>@LeagueDisplayHelper.ToDisplay(l.Name)</option>
                 }
                 else
                 {
-                    <option value="@l.Id">@l.Name</option>
+                    <option value="@l.Id">@LeagueDisplayHelper.ToDisplay(l.Name)</option>
                 }
             }
         </select>
@@ -207,7 +207,7 @@ else
                 @foreach (var p in Model.Patterns)
                 {
                     <tr>
-                        <td>@p.LeagueName</td>
+                        <td>@LeagueDisplayHelper.ToTurkish(p.LeagueName)</td>
                         <td>@p.SeasonName</td>
                         <td><strong>@p.TeamName</strong></td>
                         <td>
