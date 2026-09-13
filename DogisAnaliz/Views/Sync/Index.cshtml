@@ -65,6 +65,8 @@
                 var leagueRows = Model.Where(r => r.LeagueName == league).OrderBy(r => r.SeasonYear).ToList();
                 var firstRow   = leagueRows.First();
                 var totalInDb  = leagueRows.Sum(r => r.MatchCount);
+                var scheduleInDb = leagueRows.Sum(r => r.ScheduleCount);
+                var activeRow  = leagueRows.FirstOrDefault(r => r.SeasonYear == 2026) ?? firstRow;
 
                 <tr>
                     <!-- Lig adı -->
@@ -72,6 +74,7 @@
                         <span class="league-name">@LeagueDisplayHelper.ToDisplay(league, firstRow.Country)</span>
                         <div class="text-muted" style="font-size:0.7rem;">@firstRow.Country | API: @firstRow.ApiId | <em>@league</em></div>
                         <div class="text-muted" style="font-size:0.75rem;">Toplam DB: <strong>@totalInDb maç</strong></div>
+                        <div class="text-muted" style="font-size:0.75rem;">📅 Fikstür takvimi: <strong>@scheduleInDb</strong> maç</div>
                     </td>
 
                     <!-- Her sezon için hücre -->
@@ -116,6 +119,15 @@
                             <button type="submit" class="btn-all"
                                     onclick="return confirm('@league için TÜM sezonlar (2020-2026) çekilecek. Mevcut olanlar atlanır. Onaylıyor musunuz?')">
                                 🔄 Tümünü Çek
+                            </button>
+                        </form>
+                        <form method="post" action="/Sync/Schedule" class="mt-1">
+                            @Html.AntiForgeryToken()
+                            <input type="hidden" name="apiLeagueId" value="@activeRow.ApiId" />
+                            <input type="hidden" name="seasonYear"  value="@activeRow.SeasonYear" />
+                            <input type="hidden" name="leagueName"  value="@league" />
+                            <button type="submit" class="btn-sync" title="Oynanmamış maçlar dahil tüm fikstürü çeker (FixtureSchedule)">
+                                📅 Fikstür Takvimi @(activeRow.SeasonYear)-@(activeRow.SeasonYear + 1)
                             </button>
                         </form>
                     </td>

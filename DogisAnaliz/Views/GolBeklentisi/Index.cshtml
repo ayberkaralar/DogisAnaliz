@@ -1,0 +1,210 @@
+@model DogisAnaliz.Models.GolBeklentisiViewModel
+@{
+    ViewData["Title"] = "Gol Beklentisi";
+}
+
+<style>
+    body { background:#0b1120; color:#e2e8f0; font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif; }
+    .gb { max-width:1200px; margin:0 auto; padding:0 16px; }
+    .gb-head { display:flex; align-items:baseline; gap:12px; flex-wrap:wrap; margin:22px 0 6px; }
+    .gb-head h4 { font-weight:800; letter-spacing:.5px; margin:0; }
+    .gb-head .sub { color:#94a3b8; font-size:.92rem; }
+    .gb-note { color:#8ca0b8; font-size:.82rem; line-height:1.55; margin-bottom:18px; border-left:3px solid #22c55e; padding-left:12px; }
+    .gb-bar { display:flex; gap:14px; flex-wrap:wrap; align-items:center; margin-bottom:18px; }
+    .gb-bar label { color:#94a3b8; font-size:.8rem; font-weight:600; text-transform:uppercase; letter-spacing:.04em; }
+    .gb-bar select { background:#131c2e; color:#e2e8f0; border:1px solid #2b3a52; border-radius:9px; padding:7px 13px; font-weight:600; font-size:.9rem; }
+    .gb-bar select:focus { outline:none; border-color:#22c55e; }
+
+    .gb-kpis { display:grid; grid-template-columns:repeat(3,1fr); gap:12px; margin-bottom:18px; max-width:520px; }
+    .kpi { background:#131c2e; border:1px solid #223049; border-radius:12px; padding:14px 16px; }
+    .kpi .k { font-size:.72rem; color:#8ca0b8; text-transform:uppercase; letter-spacing:.05em; font-weight:700; }
+    .kpi .v { font-size:1.6rem; font-weight:800; margin-top:3px; line-height:1; }
+
+    .sec-hd { font-size:1.02rem; font-weight:800; color:#86efac; letter-spacing:.4px; padding:8px 4px; border-bottom:2px solid #22c55e; margin:22px 0 4px; }
+    table.grid { width:100%; border-collapse:collapse; }
+    table.grid th { text-align:left; font-size:.72rem; text-transform:uppercase; letter-spacing:.05em; color:#7d8ea6; font-weight:700; padding:9px 10px; }
+    table.grid td { padding:10px 10px; border-top:1px solid #1c2740; font-size:.9rem; }
+    table.grid tr:hover td { background:#111a2c; }
+    .mono { font-family:ui-monospace,Menlo,Consolas,monospace; }
+    .num { text-align:right; font-family:ui-monospace,monospace; }
+    tr.hot td { background:rgba(34,197,94,.10); }
+    tr.hot td:first-child { box-shadow:inset 3px 0 0 #22c55e; }
+    tr.cold td { background:rgba(148,163,184,.06); }
+    .b-hi { color:#4ade80; font-weight:800; }
+    .b-lo { color:#94a3b8; }
+    .pair { font-weight:700; color:#f1f5f9; }
+    .pair .vs { color:#64748b; margin:0 4px; }
+    .low { color:#f59e0b; font-size:.72rem; }
+    .empty { text-align:center; color:#64748b; padding:26px 0; }
+    details.teams summary { cursor:pointer; color:#86efac; font-weight:700; padding:10px 4px; }
+
+    .gb-bar input[type=date] { background:#131c2e; color:#e2e8f0; border:1px solid #2b3a52; border-radius:9px; padding:6px 12px; font-weight:600; font-size:.9rem; }
+    .gb-bar input[type=date]:focus { outline:none; border-color:#22c55e; }
+    .gb-bar a.reset { color:#8ca0b8; font-size:.8rem; text-decoration:underline; }
+    .tag-played { display:inline-block; background:#1e3a2e; color:#86efac; padding:2px 8px; border-radius:999px; font-size:.7rem; font-weight:800; }
+    .tag-pending { display:inline-block; background:#3b3212; color:#fcd34d; padding:2px 8px; border-radius:999px; font-size:.7rem; font-weight:800; }
+    .hit { color:#4ade80; font-weight:800; }
+    .miss { color:#64748b; }
+</style>
+
+<div class="gb">
+    <div class="gb-head">
+        <h4>⚽ GOL BEKLENTİSİ</h4>
+        <span class="sub">@LeagueDisplayHelper.ToTurkish(Model.SelectedLeagueName) · @Model.SelectedSeasonName</span>
+    </div>
+
+    <div class="gb-note">
+        <b>Amaç:</b> yaklaşan bir maçta çok gol (toplam 6+ veya 5+) gelme ihtimalini tahmin etmek.<br>
+        <b>Nasıl:</b> her takıma bir <b>gol ortalaması</b> veriyoruz = (tüm maçlarının ortalaması + son 10 maçının ortalaması) / 2.
+        Bir maç için iki takımın gol ortalamasını <b>topluyoruz</b> → buna <b>gol gücü</b> diyoruz (tipik değer ~5,6).
+        İki takım daha önce en az 3 kez karşılaştıysa, o maçlardaki gol ortalaması da karışıma katılır (Fenerbahçe–Galatasaray
+        gibi aralarında az gol olan eşleşmeler aşağı çekilsin diye).<br>
+        <b>Kova = gol gücü aralığı.</b> Her aralık için geçmişte kaç maçın 6+ / 5+ bittiğine bakıyoruz (aşağıdaki tablo).
+        Yaklaşan maç hangi aralığa düşerse, o aralığın tarihsel oranı = tahmin.
+    </div>
+
+    @if (Model.Leagues.Count == 0)
+    {
+        <div class="empty">Henüz maç verisi yok.</div>
+    }
+    else
+    {
+        <form method="get" action="/GolBeklentisi" class="gb-bar">
+            <span><label>Lig</label>&nbsp;
+                <select name="leagueId" onchange="this.form.submit()">
+                    @foreach (var l in Model.Leagues)
+                    {
+                        <option value="@l.Id" selected="@(l.Id == Model.SelectedLeagueId)">@LeagueDisplayHelper.ToTurkish(l.Name)</option>
+                    }
+                </select>
+            </span>
+            <span><label>Sezon</label>&nbsp;
+                <select name="seasonId" onchange="this.form.submit()">
+                    @foreach (var s in Model.Seasons)
+                    {
+                        <option value="@s.Id" selected="@(s.Id == Model.SelectedSeasonId)">@s.SeasonName</option>
+                    }
+                </select>
+            </span>
+            <span><label>Tarih</label>&nbsp;
+                <input type="date" name="date" value="@(Model.SelectedDate?.ToString("yyyy-MM-dd"))" onchange="this.form.submit()" />
+            </span>
+            @if (Model.SelectedDate.HasValue)
+            {
+                <a class="reset" href="@Url.Action("Index", new { leagueId = Model.SelectedLeagueId, seasonId = Model.SelectedSeasonId })">bugüne dön</a>
+            }
+        </form>
+
+        <div class="gb-kpis">
+            <div class="kpi"><div class="k">Bu ligde 6+ gollü maç</div><div class="v" style="color:#94a3b8">%@Model.BasePlus6</div><div class="s" style="font-size:.7rem;color:#64748b;margin-top:3px;">tüm maçların ortalaması</div></div>
+            <div class="kpi"><div class="k">Bu ligde 5+ gollü maç</div><div class="v" style="color:#94a3b8">%@Model.BasePlus5</div><div class="s" style="font-size:.7rem;color:#64748b;margin-top:3px;">tüm maçların ortalaması</div></div>
+            <div class="kpi"><div class="k">Maç başına düşen gol</div><div class="v" style="color:#e2e8f0">@Model.BaseAvgGoals.ToString("0.00")</div><div class="s" style="font-size:.7rem;color:#64748b;margin-top:3px;">bu ligin geneli</div></div>
+        </div>
+
+        <div class="sec-hd">📊 Kalibrasyon tablosu — hangi "gol gücü" aralığı ne kadar gollü geçmiş?</div>
+        <p style="color:#8ca0b8; font-size:.8rem; margin:2px 0 8px;">
+            Bu ligin <b>tüm geçmiş maçları</b>, oynandıkları andaki gol gücüne göre 5 aralığa bölündü.
+            "6+ gol %" ve "5+ gol %" o aralıktaki maçların ne kadarının çok gollü bittiğini gösterir —
+            <b>yeşil satır</b> (yüksek gol gücü) belirgin şekilde daha gollü.
+        </p>
+        <table class="grid">
+            <thead><tr><th>Gol gücü aralığı</th><th class="num">maç</th><th class="num">6+ gol %</th><th class="num">5+ gol %</th><th class="num">ort. gol</th></tr></thead>
+            <tbody>
+                @foreach (var b in Model.Buckets)
+                {
+                    var hot = b.Label == "≥ 6,2";
+                    <tr class="@(hot ? "hot" : b.Label == "< 5,0" ? "cold" : "")">
+                        <td class="mono">@b.Label</td>
+                        <td class="num">@b.N</td>
+                        <td class="num @(b.Plus6Rate > Model.BasePlus6 + 1 ? "b-hi" : b.Plus6Rate < Model.BasePlus6 - 1 ? "b-lo" : "")">%@b.Plus6Rate</td>
+                        <td class="num @(b.Plus5Rate > Model.BasePlus5 + 1 ? "b-hi" : b.Plus5Rate < Model.BasePlus5 - 1 ? "b-lo" : "")">%@b.Plus5Rate</td>
+                        <td class="num">@b.AvgGoals.ToString("0.00")</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+
+        <div class="sec-hd">
+            🎯 @Model.WindowWeekStart. ve @Model.WindowWeekEnd. hafta
+            @if (Model.WindowFrom.HasValue && Model.WindowTo.HasValue)
+            {
+                <span style="color:#8ca0b8; font-weight:600; font-size:.85rem;">
+                    (@Model.WindowFrom.Value.ToString("dd.MM.yyyy") – @Model.WindowTo.Value.ToString("dd.MM.yyyy"))
+                </span>
+            }
+        </div>
+        <p style="color:#8ca0b8; font-size:.8rem; margin:2px 0 8px;">
+            <b>Tarih</b> kutusuna bir gün seçersen, o günün içinde olduğu hafta + bir sonraki hafta gösterilir (varsayılan: bugün).
+            <b>Oynanmış</b> maçlarda tahmin, o maç oynanmadan <b>önceki</b> bilgiyle hesaplanmıştır — gerçek skorla yan yana koyup
+            tutarlılığı gözle kontrol edebilirsin. <b>Ev ort. / Dep ort.</b>: takımların gol ortalaması &nbsp;·&nbsp;
+            <b>H2H</b>: ikilinin geçmiş karşılaşma sayısı/gol ortalaması &nbsp;·&nbsp; <b>Gol gücü</b>: ikisinin birleşimi &nbsp;·&nbsp;
+            <b>6+ % / 5+ %</b>: o gol gücü aralığının tarihsel çok-gol oranı.
+        </p>
+        @if (Model.WindowFixtures.Count == 0)
+        {
+            <div class="empty">Bu lig/sezon için seçili tarih aralığında maç bulunamadı.</div>
+        }
+        else
+        {
+            <table class="grid">
+                <thead>
+                    <tr>
+                        <th>Hf</th><th>Tarih (TSİ)</th><th>Maç</th><th>Durum</th><th>Skor</th>
+                        <th class="num">Ev ort.</th><th class="num">Dep ort.</th>
+                        <th class="num">H2H</th><th class="num">H2H ort.</th>
+                        <th class="num">Gol gücü</th>
+                        <th class="num">6+ %</th><th class="num">5+ %</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var f in Model.WindowFixtures)
+                    {
+                        <tr class="@(f.BucketLabel == "≥ 6,2" ? "hot" : f.BucketLabel == "< 5,0" ? "cold" : "")">
+                            <td class="mono">@f.Week</td>
+                            <td class="mono" style="color:#cbd5e1">@f.KickoffTr.ToString("dd.MM.yyyy HH:mm")</td>
+                            <td class="pair">
+                                @f.Home<span class="vs">–</span>@f.Away
+                                @if (f.LowData) { <span class="low">(az veri)</span> }
+                            </td>
+                            <td>
+                                @if (f.IsPlayed) { <span class="tag-played">Oynandı</span> } else { <span class="tag-pending">Bekliyor</span> }
+                            </td>
+                            <td class="mono @(f.IsPlayed ? (f.HitPlus6 == true ? "hit" : "miss") : "")" style="font-weight:800">@f.ScoreText</td>
+                            <td class="num">@f.HomeRate.ToString("0.00")</td>
+                            <td class="num">@f.AwayRate.ToString("0.00")</td>
+                            <td class="num" style="color:#8ca0b8">@(f.H2hCount > 0 ? f.H2hCount.ToString() : "–")</td>
+                            <td class="num @(f.H2hCount >= 3 ? "" : "b-lo")">@(f.H2hCount > 0 ? f.H2hAvg.ToString("0.00") : "–")</td>
+                            <td class="num mono" style="font-weight:800">@f.Combined.ToString("0.00")</td>
+                            <td class="num @(f.Plus6Rate > Model.BasePlus6 + 1 ? "b-hi" : "")">%@f.Plus6Rate</td>
+                            <td class="num @(f.Plus5Rate > Model.BasePlus5 + 1 ? "b-hi" : "")">%@f.Plus5Rate</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        }
+
+        <details class="teams">
+            <summary>Takım gol ortalamaları — nasıl hesaplandığını gör (@Model.Teams.Count takım)</summary>
+            <p style="color:#8ca0b8; font-size:.8rem; margin:2px 0 8px;">
+                <b>Kariyer</b>: takımın tüm maçlarındaki ortalama toplam gol &nbsp;·&nbsp;
+                <b>Son 10</b>: son 10 maçının ortalaması &nbsp;·&nbsp;
+                <b>Gol ort.</b> = (Kariyer + Son 10) / 2 — maç tablosundaki "Ev ort." / "Dep ort." bu.
+            </p>
+            <table class="grid">
+                <thead><tr><th>Takım</th><th class="num">Maç</th><th class="num">Kariyer</th><th class="num">Son 10</th><th class="num">Gol ort.</th></tr></thead>
+                <tbody>
+                    @foreach (var t in Model.Teams)
+                    {
+                        <tr>
+                            <td>@t.Name @if (t.LowData) { <span class="low">(az veri)</span> }</td>
+                            <td class="num">@t.Played</td>
+                            <td class="num">@t.CareerAvg.ToString("0.00")</td>
+                            <td class="num">@t.RecentAvg.ToString("0.00")</td>
+                            <td class="num" style="font-weight:800">@t.Blended.ToString("0.00")</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </details>
+    }
+</div>

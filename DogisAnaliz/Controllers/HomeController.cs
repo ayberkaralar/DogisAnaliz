@@ -15,10 +15,13 @@ public class HomeController : Controller
         _context = context;
     }
 
-    public async Task<IActionResult> Index(int? leagueId, int? seasonId, int? teamId, string filter = "ALL", string sort = "week_asc")
+    public async Task<IActionResult> Index(int? leagueId, int? seasonId, int? teamId, string filter = "ALL", string sort = "week_asc", string view = "surprise")
     {
+        bool fixturesMode = view == "fixtures";
+
         var viewModel = new DashboardViewModel
         {
+            ViewMode       = fixturesMode ? "fixtures" : "surprise",
             SelectedFilter = filter,
             SortOrder      = sort,
             SelectedTeamId = teamId
@@ -84,43 +87,80 @@ public class HomeController : Controller
             }
             viewModel.SelectedSeasonId = seasonId;
 
-            // 4. Seçili ligdeki takımları al (sürpriz sayısına göre) — sezon bağımsız tüm sezonlar
-            var teamSurprisesHome = await _context.Matches.AsNoTracking()
-                .Where(m => m.LeagueId == leagueId.Value && m.Surprise != null && m.Surprise.SurpriseType != "NONE")
-                .GroupBy(m => new { m.HomeTeamId, m.HomeTeam!.Name })
-                .Select(g => new { g.Key.HomeTeamId, g.Key.Name, Count = g.Count() })
-                .ToListAsync();
-
-            var teamSurprisesAway = await _context.Matches.AsNoTracking()
-                .Where(m => m.LeagueId == leagueId.Value && m.Surprise != null && m.Surprise.SurpriseType != "NONE")
-                .GroupBy(m => new { m.AwayTeamId, m.AwayTeam!.Name })
-                .Select(g => new { g.Key.AwayTeamId, g.Key.Name, Count = g.Count() })
-                .ToListAsync();
-
-            var teamDict = new Dictionary<int, (string Name, int Count)>();
-            foreach (var t in teamSurprisesHome)
-                teamDict[t.HomeTeamId] = (t.Name, t.Count);
-            foreach (var t in teamSurprisesAway)
+            // 4. Seçili ligdeki takımları al
+            if (fixturesMode)
             {
-                if (teamDict.TryGetValue(t.AwayTeamId, out var existing))
-                    teamDict[t.AwayTeamId] = (existing.Name, existing.Count + t.Count);
-                else
-                    teamDict[t.AwayTeamId] = (t.Name, t.Count);
+                // Fikstür modu: seçili lig + seçili sezonda maçı olan TÜM takımlar (oynanan maç sayısıyla)
+                var teamMatchesHome = await _context.Matches.AsNoTracking()
+                    .Where(m => m.LeagueId == leagueId.Value && (!seasonId.HasValue || m.SeasonId == seasonId.Value))
+                    .GroupBy(m => new { m.HomeTeamId, m.HomeTeam!.Name })
+                    .Select(g => new { g.Key.HomeTeamId, g.Key.Name, Count = g.Count() })
+                    .ToListAsync();
+
+                var teamMatchesAway = await _context.Matches.AsNoTracking()
+                    .Where(m => m.LeagueId == leagueId.Value && (!seasonId.HasValue || m.SeasonId == seasonId.Value))
+                    .GroupBy(m => new { m.AwayTeamId, m.AwayTeam!.Name })
+                    .Select(g => new { g.Key.AwayTeamId, g.Key.Name, Count = g.Count() })
+                    .ToListAsync();
+
+                var tDict = new Dictionary<int, (string Name, int Count)>();
+                foreach (var t in teamMatchesHome)
+                    tDict[t.HomeTeamId] = (t.Name, t.Count);
+                foreach (var t in teamMatchesAway)
+                {
+                    if (tDict.TryGetValue(t.AwayTeamId, out var existing))
+                        tDict[t.AwayTeamId] = (existing.Name, existing.Count + t.Count);
+                    else
+                        tDict[t.AwayTeamId] = (t.Name, t.Count);
+                }
+
+                viewModel.Teams = tDict
+                    .Select(kv => new TeamNavDto { Id = kv.Key, Name = kv.Value.Name, MatchCount = kv.Value.Count })
+                    .OrderBy(t => t.Name)
+                    .ToList();
+            }
+            else
+            {
+                // Sürpriz modu: sürpriz sayısına göre — sezon bağımsız tüm sezonlar
+                var teamSurprisesHome = await _context.Matches.AsNoTracking()
+                    .Where(m => m.LeagueId == leagueId.Value && m.Surprise != null && m.Surprise.SurpriseType != "NONE")
+                    .GroupBy(m => new { m.HomeTeamId, m.HomeTeam!.Name })
+                    .Select(g => new { g.Key.HomeTeamId, g.Key.Name, Count = g.Count() })
+                    .ToListAsync();
+
+                var teamSurprisesAway = await _context.Matches.AsNoTracking()
+                    .Where(m => m.LeagueId == leagueId.Value && m.Surprise != null && m.Surprise.SurpriseType != "NONE")
+                    .GroupBy(m => new { m.AwayTeamId, m.AwayTeam!.Name })
+                    .Select(g => new { g.Key.AwayTeamId, g.Key.Name, Count = g.Count() })
+                    .ToListAsync();
+
+                var teamDict = new Dictionary<int, (string Name, int Count)>();
+                foreach (var t in teamSurprisesHome)
+                    teamDict[t.HomeTeamId] = (t.Name, t.Count);
+                foreach (var t in teamSurprisesAway)
+                {
+                    if (teamDict.TryGetValue(t.AwayTeamId, out var existing))
+                        teamDict[t.AwayTeamId] = (existing.Name, existing.Count + t.Count);
+                    else
+                        teamDict[t.AwayTeamId] = (t.Name, t.Count);
+                }
+
+                viewModel.Teams = teamDict
+                    .Select(kv => new TeamNavDto { Id = kv.Key, Name = kv.Value.Name, SurpriseCount = kv.Value.Count })
+                    .OrderBy(t => t.Name)
+                    .ToList();
             }
 
-            viewModel.Teams = teamDict
-                .Select(kv => new TeamNavDto { Id = kv.Key, Name = kv.Value.Name, SurpriseCount = kv.Value.Count })
-                .OrderBy(t => t.Name)
-                .ToList();
-
-            // 5. Sürpriz maçları sorgula
+            // 5. Maçları sorgula
             var query = _context.Matches.AsNoTracking()
                 .Include(m => m.HomeTeam)
                 .Include(m => m.AwayTeam)
                 .Include(m => m.Surprise)
-                .Where(m => m.LeagueId == leagueId.Value
-                         && m.Surprise != null
-                         && m.Surprise.SurpriseType != "NONE");
+                .Where(m => m.LeagueId == leagueId.Value);
+
+            // Sürpriz modunda sadece sürpriz maçlar; fikstür modunda tüm maçlar
+            if (!fixturesMode)
+                query = query.Where(m => m.Surprise != null && m.Surprise.SurpriseType != "NONE");
 
             if (seasonId.HasValue)
                 query = query.Where(m => m.SeasonId == seasonId.Value);
@@ -129,19 +169,48 @@ public class HomeController : Controller
             if (teamId.HasValue)
                 query = query.Where(m => m.HomeTeamId == teamId.Value || m.AwayTeamId == teamId.Value);
 
-            // 7. KPI Kartları (takım filtresi dahil)
-            viewModel.TotalMatchesCount   = await query.CountAsync();
-            viewModel.TurnaroundCount     = await query.CountAsync(m => m.Surprise!.IsTurnaround);
-            viewModel.HighGoalCount       = await query.CountAsync(m => m.Surprise!.IsHighGoal);
-            viewModel.DoubleSurpriseCount = await query.CountAsync(m => m.Surprise!.IsDoubleSurprise);
+            // 7. KPI Kartları (takım filtresi dahil, tür filtresinden önce)
+            if (fixturesMode)
+            {
+                viewModel.TotalMatchesCount = await query.CountAsync();
+                viewModel.HomeWinCount      = await query.CountAsync(m => m.FtHomeScore > m.FtAwayScore);
+                viewModel.DrawCount         = await query.CountAsync(m => m.FtHomeScore == m.FtAwayScore);
+                viewModel.AwayWinCount      = await query.CountAsync(m => m.FtHomeScore < m.FtAwayScore);
+                viewModel.TurnaroundCount   = await query.CountAsync(m => m.Surprise != null && m.Surprise.IsTurnaround);
+                viewModel.HighGoalCount     = await query.CountAsync(m => m.Surprise != null && m.Surprise.IsHighGoal);
+                viewModel.AvgGoals = viewModel.TotalMatchesCount > 0
+                    ? await query.AverageAsync(m => (double)(m.FtHomeScore + m.FtAwayScore))
+                    : 0;
+            }
+            else
+            {
+                viewModel.TotalMatchesCount   = await query.CountAsync();
+                viewModel.TurnaroundCount     = await query.CountAsync(m => m.Surprise!.IsTurnaround);
+                viewModel.HighGoalCount       = await query.CountAsync(m => m.Surprise!.IsHighGoal);
+                viewModel.DoubleSurpriseCount = await query.CountAsync(m => m.Surprise!.IsDoubleSurprise);
+            }
 
-            // 8. Sürpriz türü filtresi
-            if (filter == "TURNAROUND")
-                query = query.Where(m => m.Surprise!.IsTurnaround);
-            else if (filter == "HIGH_GOAL")
-                query = query.Where(m => m.Surprise!.IsHighGoal);
-            else if (filter == "DOUBLE")
-                query = query.Where(m => m.Surprise!.IsDoubleSurprise);
+            // 8. Tür filtresi
+            if (fixturesMode)
+            {
+                if (filter == "SURPRISE")
+                    query = query.Where(m => m.Surprise != null && m.Surprise.SurpriseType != "NONE");
+                else if (filter == "TURNAROUND")
+                    query = query.Where(m => m.Surprise != null && m.Surprise.IsTurnaround);
+                else if (filter == "HIGH_GOAL")
+                    query = query.Where(m => m.Surprise != null && m.Surprise.IsHighGoal);
+                else if (filter == "NORMAL")
+                    query = query.Where(m => m.Surprise == null || m.Surprise.SurpriseType == "NONE");
+            }
+            else
+            {
+                if (filter == "TURNAROUND")
+                    query = query.Where(m => m.Surprise!.IsTurnaround);
+                else if (filter == "HIGH_GOAL")
+                    query = query.Where(m => m.Surprise!.IsHighGoal);
+                else if (filter == "DOUBLE")
+                    query = query.Where(m => m.Surprise!.IsDoubleSurprise);
+            }
 
             // 9. Sıralama
             query = sort switch
@@ -175,12 +244,64 @@ public class HomeController : Controller
                     AwayTeam     = m.AwayTeamName,
                     HtScore      = $"{m.HtHomeScore}-{m.HtAwayScore}",
                     FtScore      = $"{m.FtHomeScore}-{m.FtAwayScore}",
+                    FtHome       = m.FtHomeScore,
+                    FtAway       = m.FtAwayScore,
+                    MsResultCode = m.FtHomeScore > m.FtAwayScore ? "1" : (m.FtHomeScore < m.FtAwayScore ? "2" : "X"),
                     IyMsCode     = m.IyMsCode,
                     TotalGoals   = m.TotalGoals,
                     SurpriseType = m.SurpriseType,
                     IsHomeTeam   = teamId.HasValue && m.HomeTeamId == teamId.Value
                 })
                 .ToList();
+
+            // 11. Fikstür modu + takım seçili → takım sezon özeti (bellek içinde, ekstra sorgu yok)
+            if (fixturesMode && teamId.HasValue && viewModel.Matches.Count > 0)
+            {
+                var stats = new TeamFixtureStatsDto
+                {
+                    TeamName = viewModel.Teams.FirstOrDefault(t => t.Id == teamId.Value)?.Name ?? "-"
+                };
+
+                int totalGoalsInMatches = 0;
+                foreach (var m in viewModel.Matches)
+                {
+                    bool home = m.IsHomeTeam;
+                    int gf = home ? m.FtHome : m.FtAway;
+                    int ga = home ? m.FtAway : m.FtHome;
+
+                    stats.Played++;
+                    stats.GoalsFor += gf;
+                    stats.GoalsAgainst += ga;
+                    totalGoalsInMatches += m.FtHome + m.FtAway;
+
+                    bool win  = gf > ga;
+                    bool draw = gf == ga;
+
+                    if (win) stats.Wins++;
+                    else if (draw) stats.Draws++;
+                    else stats.Losses++;
+
+                    if (home)
+                    {
+                        stats.HomePlayed++;
+                        if (win) stats.HomeWins++; else if (draw) stats.HomeDraws++; else stats.HomeLosses++;
+                    }
+                    else
+                    {
+                        stats.AwayPlayed++;
+                        if (win) stats.AwayWins++; else if (draw) stats.AwayDraws++; else stats.AwayLosses++;
+                    }
+
+                    if (m.TotalGoals >= 6) stats.HighGoalCount++;
+                    if (m.SurpriseType == "TURNAROUND" || m.SurpriseType == "DOUBLE_SURPRISE") stats.TurnaroundCount++;
+                    if (m.SurpriseType != "NONE") stats.SurpriseCount++;
+                }
+
+                stats.AvgTotalGoals = stats.Played > 0
+                    ? Math.Round((double)totalGoalsInMatches / stats.Played, 2)
+                    : 0;
+                viewModel.TeamStats = stats;
+            }
         }
 
         return View(viewModel);

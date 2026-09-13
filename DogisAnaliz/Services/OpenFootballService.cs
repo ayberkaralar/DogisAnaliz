@@ -67,11 +67,15 @@ public class OpenFootballService
             return 0;
         }
 
-        // Takım dictionary'si lowercase key ile — case-insensitive eşleşme için
-        var existingTeams   = await _context.Teams
-            .ToDictionaryAsync(t => t.Name.ToLower(), t => t);
-        var existingSeasons = await _context.Seasons.ToDictionaryAsync(s => s.SeasonName, s => s);
-        var existingLeagues = await _context.Leagues.ToDictionaryAsync(l => l.Name, l => l);
+        // Takım dictionary'si lowercase key ile — case-insensitive eşleşme için.
+        // GroupBy + First (ToDictionaryAsync değil): DB'de henüz birleştirilmemiş aynı isimli
+        // duplicate kayıt varsa çökmek yerine ilkini kullan.
+        var existingTeams = (await _context.Teams.ToListAsync())
+            .GroupBy(t => t.Name.ToLower()).ToDictionary(g => g.Key, g => g.First());
+        var existingSeasons = (await _context.Seasons.ToListAsync())
+            .GroupBy(s => s.SeasonName).ToDictionary(g => g.Key, g => g.First());
+        var existingLeagues = (await _context.Leagues.ToListAsync())
+            .GroupBy(l => l.Name).ToDictionary(g => g.Key, g => g.First());
 
         // Lig
         if (!existingLeagues.TryGetValue(leagueName, out var league))

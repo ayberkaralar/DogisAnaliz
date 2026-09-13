@@ -3,6 +3,8 @@
     ViewData["Title"] = "DogisAnaliz - Dashboard";
     var nextWeekSort = Model.SortOrder == "week_asc" ? "week_desc" : "week_asc";
     var nextDateSort = Model.SortOrder == "date_desc" ? "date_asc"  : "date_desc";
+    var view = Model.ViewMode;
+    var fixturesMode = view == "fixtures";
 }
 
 <style>
@@ -248,7 +250,7 @@
                     @foreach (var league in Model.Leagues)
                     {
                         var isActive = league.Id == Model.SelectedLeagueId ? "active" : "";
-                        <a asp-action="Index" asp-route-leagueId="@league.Id" asp-route-seasonId="@Model.SelectedSeasonId" asp-route-sort="@Model.SortOrder" class="nav-league-item @isActive">
+                        <a asp-action="Index" asp-route-leagueId="@league.Id" asp-route-seasonId="@Model.SelectedSeasonId" asp-route-sort="@Model.SortOrder" asp-route-view="@view" class="nav-league-item @isActive">
                             <span>@LeagueDisplayHelper.ToDisplay(league.Name)</span>
                             <span class="badge bg-dark border border-secondary rounded-pill">@league.SurpriseCount</span>
                         </a>
@@ -259,11 +261,47 @@
 
         <!-- SAĞ PANEL (ANA ÇALIŞMA ALANI) -->
         <div class="col-md-9 col-lg-10">
+            @if (TempData["SyncResult"] != null)
+            {
+                <div class="alert @(TempData["SyncResult"]!.ToString()!.StartsWith("✅") ? "alert-success" : "alert-danger") py-2 mb-3" style="font-size:0.9rem;">
+                    @TempData["SyncResult"]
+                </div>
+            }
+
+            <!-- TEK DÜĞME: TÜM LİGLERİN AKTİF SEZON MAÇLARINI GÜNCELLE -->
+            <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3 p-3 rounded-3 border border-primary border-opacity-25"
+                 style="background:#111c30;">
+                <div>
+                    <span class="fw-bold text-white">🔄 Senkronize Et</span>
+                    <span class="text-secondary small ms-2">
+                        Tek tıkla <strong>tüm liglerin</strong> aktif sezon (@(DogisAnaliz.Services.LeagueCatalog.ActiveSeasonYear)-@(DogisAnaliz.Services.LeagueCatalog.ActiveSeasonYear + 1)) maçlarını api-sports'tan çeker.
+                    </span>
+                </div>
+                <form method="post" action="/Sync/RefreshAllActive"
+                      onsubmit="var b=this.querySelector('button'); b.disabled=true; b.textContent='⏳ Güncelleniyor…';">
+                    @Html.AntiForgeryToken()
+                    <input type="hidden" name="returnUrl" value="@($"{Context.Request.Path}{Context.Request.QueryString}")" />
+                    <button type="submit" class="btn btn-primary btn-sm fw-semibold"
+                            title="Tüm liglerin aktif sezonundaki oynanan maçları api-sports'tan günceller (~15-30 sn)"
+                            onclick="return confirm('Tüm liglerin aktif sezonu (@(DogisAnaliz.Services.LeagueCatalog.ActiveSeasonYear)-@(DogisAnaliz.Services.LeagueCatalog.ActiveSeasonYear + 1)) maçları güncellenecek. 15-30 saniye sürebilir. Devam edilsin mi?');">
+                        🔄 Şimdi Senkronize Et
+                    </button>
+                </form>
+            </div>
+
             <!-- ÜST BAŞLIK VE YIL / SEZON FİLTRESİ -->
             <div class="d-flex flex-wrap justify-content-between align-items-center mb-3 bg-dark p-3 rounded-3 border border-secondary border-opacity-25 shadow-sm">
                 <div>
-                    <h3 class="fw-bold text-white mb-0">@LeagueDisplayHelper.ToTurkish(Model.SelectedLeagueName) Sürpriz Analizi</h3>
-                    <small class="text-secondary">Sadece 1/2, 2/1 ve +6 Gol Biten Özel Karşılaşmalar</small>
+                    @if (fixturesMode)
+                    {
+                        <h3 class="fw-bold text-white mb-0">@LeagueDisplayHelper.ToTurkish(Model.SelectedLeagueName) Fikstür &amp; Sonuçlar</h3>
+                        <small class="text-secondary">Tüm maçlar — hafta, İY/MS skoru ve sonuç</small>
+                    }
+                    else
+                    {
+                        <h3 class="fw-bold text-white mb-0">@LeagueDisplayHelper.ToTurkish(Model.SelectedLeagueName) Sürpriz Analizi</h3>
+                        <small class="text-secondary">Sadece 1/2, 2/1 ve +6 Gol Biten Özel Karşılaşmalar</small>
+                    }
                 </div>
 
                 <!-- YIL / SEZON DROPDOWN FİLTRESİ -->
@@ -273,7 +311,7 @@
                         @foreach (var season in Model.Seasons)
                         {
                             var isSelected = season.Id == Model.SelectedSeasonId ? "selected" : "";
-                            <!option value="@Url.Action("Index", new { leagueId = Model.SelectedLeagueId, seasonId = season.Id, teamId = Model.SelectedTeamId, filter = Model.SelectedFilter, sort = Model.SortOrder })" @isSelected>
+                            <!option value="@Url.Action("Index", new { leagueId = Model.SelectedLeagueId, seasonId = season.Id, teamId = Model.SelectedTeamId, filter = Model.SelectedFilter, sort = Model.SortOrder, view })" @isSelected>
                                 @season.SeasonName
                             </!option>
                         }
@@ -292,7 +330,7 @@
                             <!-- Dropdown seçimi (normalde gizli, arama ile filtrelenir) -->
                             <select id="teamSelect" class="season-select" onchange="location = this.value;"
                                     style="min-width:180px; display:none;">
-                                <option value="@Url.Action("Index", new { leagueId = Model.SelectedLeagueId, seasonId = Model.SelectedSeasonId, teamId = (int?)null, filter = Model.SelectedFilter, sort = Model.SortOrder })">
+                                <option value="@Url.Action("Index", new { leagueId = Model.SelectedLeagueId, seasonId = Model.SelectedSeasonId, teamId = (int?)null, filter = Model.SelectedFilter, sort = Model.SortOrder, view })">
                                     — Tüm Takımlar —
                                 </option>
                                 @foreach (var team in Model.Teams)
@@ -300,16 +338,16 @@
                                     var isSel = team.Id == Model.SelectedTeamId;
                                     if (isSel)
                                     {
-                                        <option value="@Url.Action("Index", new { leagueId = Model.SelectedLeagueId, seasonId = Model.SelectedSeasonId, teamId = team.Id, filter = Model.SelectedFilter, sort = Model.SortOrder })" selected
+                                        <option value="@Url.Action("Index", new { leagueId = Model.SelectedLeagueId, seasonId = Model.SelectedSeasonId, teamId = team.Id, filter = Model.SelectedFilter, sort = Model.SortOrder, view })" selected
                                                 data-name="@team.Name">
-                                            @team.Name (@team.SurpriseCount)
+                                            @team.Name (@(fixturesMode ? team.MatchCount : team.SurpriseCount))
                                         </option>
                                     }
                                     else
                                     {
-                                        <option value="@Url.Action("Index", new { leagueId = Model.SelectedLeagueId, seasonId = Model.SelectedSeasonId, teamId = team.Id, filter = Model.SelectedFilter, sort = Model.SortOrder })"
+                                        <option value="@Url.Action("Index", new { leagueId = Model.SelectedLeagueId, seasonId = Model.SelectedSeasonId, teamId = team.Id, filter = Model.SelectedFilter, sort = Model.SortOrder, view })"
                                                 data-name="@team.Name">
-                                            @team.Name (@team.SurpriseCount)
+                                            @team.Name (@(fixturesMode ? team.MatchCount : team.SurpriseCount))
                                         </option>
                                     }
                                 }
@@ -323,58 +361,144 @@
                         </div>
                         @if (Model.SelectedTeamId.HasValue)
                         {
-                            <a href="@Url.Action("Index", new { leagueId = Model.SelectedLeagueId, seasonId = Model.SelectedSeasonId, filter = Model.SelectedFilter, sort = Model.SortOrder })"
+                            <a href="@Url.Action("Index", new { leagueId = Model.SelectedLeagueId, seasonId = Model.SelectedSeasonId, filter = Model.SelectedFilter, sort = Model.SortOrder, view })"
                                class="btn-filter" style="padding:5px 10px; font-size:0.8rem;" title="Takım filtresini kaldır">✕</a>
                         }
                     }
                 </div>
             </div>
 
-            <!-- KPI ÖZET KARTLARI -->
-            <div class="row g-3 mb-4">
-                <div class="col-6 col-md-3">
-                    <div class="kpi-card shadow-sm border-secondary">
-                        <div class="kpi-title text-light">Toplam Sürpriz</div>
-                        <div class="kpi-value text-white">@Model.TotalMatchesCount</div>
-                    </div>
-                </div>
-                <div class="col-6 col-md-3">
-                    <div class="kpi-card shadow-sm border-warning border-opacity-50">
-                        <div class="kpi-title text-warning">Dönüş (1/2 - 2/1)</div>
-                        <div class="kpi-value text-warning">@Model.TurnaroundCount</div>
-                    </div>
-                </div>
-                <div class="col-6 col-md-3">
-                    <div class="kpi-card shadow-sm border-info border-opacity-50">
-                        <div class="kpi-title text-info">+6 Gol Biten</div>
-                        <div class="kpi-value text-info">@Model.HighGoalCount</div>
-                    </div>
-                </div>
-                <div class="col-6 col-md-3">
-                    <div class="kpi-card shadow-sm border-primary border-opacity-50">
-                        <div class="kpi-title text-primary">Çifte Sürpriz</div>
-                        <div class="kpi-value text-primary">@Model.DoubleSurpriseCount</div>
-                    </div>
-                </div>
+            <!-- SÜRPRİZ / FİKSTÜR SEKMELERİ -->
+            <div class="d-flex gap-2 mb-3">
+                <a asp-action="Index" asp-route-leagueId="@Model.SelectedLeagueId" asp-route-seasonId="@Model.SelectedSeasonId" asp-route-teamId="@Model.SelectedTeamId" asp-route-filter="ALL" asp-route-sort="@Model.SortOrder" asp-route-view="surprise" class="btn-filter @(!fixturesMode ? "active" : "")">🎯 Sürpriz</a>
+                <a asp-action="Index" asp-route-leagueId="@Model.SelectedLeagueId" asp-route-seasonId="@Model.SelectedSeasonId" asp-route-teamId="@Model.SelectedTeamId" asp-route-filter="ALL" asp-route-sort="@Model.SortOrder" asp-route-view="fixtures" class="btn-filter @(fixturesMode ? "active" : "")">📋 Fikstür</a>
             </div>
 
-            <!-- HIZLI SÜRPRİZ TÜRÜ FİLTRELERİ & SIRALAMA -->
+            <!-- KPI ÖZET KARTLARI -->
+            <div class="row g-3 mb-4">
+                @if (fixturesMode)
+                {
+                    <div class="col-6 col-md-3 col-lg">
+                        <div class="kpi-card shadow-sm border-secondary">
+                            <div class="kpi-title text-light">Toplam Maç</div>
+                            <div class="kpi-value text-white">@Model.TotalMatchesCount</div>
+                        </div>
+                    </div>
+                    <div class="col-6 col-md-3 col-lg">
+                        <div class="kpi-card shadow-sm border-success border-opacity-50">
+                            <div class="kpi-title text-success">Ev Galibiyeti</div>
+                            <div class="kpi-value text-success">@Model.HomeWinCount</div>
+                        </div>
+                    </div>
+                    <div class="col-6 col-md-3 col-lg">
+                        <div class="kpi-card shadow-sm border-secondary border-opacity-50">
+                            <div class="kpi-title text-light">Beraberlik</div>
+                            <div class="kpi-value text-white">@Model.DrawCount</div>
+                        </div>
+                    </div>
+                    <div class="col-6 col-md-3 col-lg">
+                        <div class="kpi-card shadow-sm border-primary border-opacity-50">
+                            <div class="kpi-title text-primary">Deplasman Galibiyeti</div>
+                            <div class="kpi-value text-primary">@Model.AwayWinCount</div>
+                        </div>
+                    </div>
+                    <div class="col-6 col-md-3 col-lg">
+                        <div class="kpi-card shadow-sm border-info border-opacity-50">
+                            <div class="kpi-title text-info">Gol Ortalaması</div>
+                            <div class="kpi-value text-info">@Model.AvgGoals.ToString("0.00")</div>
+                        </div>
+                    </div>
+                }
+                else
+                {
+                    <div class="col-6 col-md-3">
+                        <div class="kpi-card shadow-sm border-secondary">
+                            <div class="kpi-title text-light">Toplam Sürpriz</div>
+                            <div class="kpi-value text-white">@Model.TotalMatchesCount</div>
+                        </div>
+                    </div>
+                    <div class="col-6 col-md-3">
+                        <div class="kpi-card shadow-sm border-warning border-opacity-50">
+                            <div class="kpi-title text-warning">Dönüş (1/2 - 2/1)</div>
+                            <div class="kpi-value text-warning">@Model.TurnaroundCount</div>
+                        </div>
+                    </div>
+                    <div class="col-6 col-md-3">
+                        <div class="kpi-card shadow-sm border-info border-opacity-50">
+                            <div class="kpi-title text-info">+6 Gol Biten</div>
+                            <div class="kpi-value text-info">@Model.HighGoalCount</div>
+                        </div>
+                    </div>
+                    <div class="col-6 col-md-3">
+                        <div class="kpi-card shadow-sm border-primary border-opacity-50">
+                            <div class="kpi-title text-primary">Çifte Sürpriz</div>
+                            <div class="kpi-value text-primary">@Model.DoubleSurpriseCount</div>
+                        </div>
+                    </div>
+                }
+            </div>
+
+            <!-- HIZLI TÜR FİLTRELERİ & SIRALAMA -->
             <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
                 <div class="d-flex flex-wrap gap-2">
-                    <a asp-action="Index" asp-route-leagueId="@Model.SelectedLeagueId" asp-route-seasonId="@Model.SelectedSeasonId" asp-route-teamId="@Model.SelectedTeamId" asp-route-filter="ALL"        asp-route-sort="@Model.SortOrder" class="btn-filter @(Model.SelectedFilter == "ALL"        ? "active" : "")">Tüm Sürprizler (@Model.TotalMatchesCount)</a>
-                    <a asp-action="Index" asp-route-leagueId="@Model.SelectedLeagueId" asp-route-seasonId="@Model.SelectedSeasonId" asp-route-teamId="@Model.SelectedTeamId" asp-route-filter="TURNAROUND" asp-route-sort="@Model.SortOrder" class="btn-filter @(Model.SelectedFilter == "TURNAROUND" ? "active" : "")">Dönüş (@Model.TurnaroundCount)</a>
-                    <a asp-action="Index" asp-route-leagueId="@Model.SelectedLeagueId" asp-route-seasonId="@Model.SelectedSeasonId" asp-route-teamId="@Model.SelectedTeamId" asp-route-filter="HIGH_GOAL"  asp-route-sort="@Model.SortOrder" class="btn-filter @(Model.SelectedFilter == "HIGH_GOAL"  ? "active" : "")">+6 Goller (@Model.HighGoalCount)</a>
-                    <a asp-action="Index" asp-route-leagueId="@Model.SelectedLeagueId" asp-route-seasonId="@Model.SelectedSeasonId" asp-route-teamId="@Model.SelectedTeamId" asp-route-filter="DOUBLE"     asp-route-sort="@Model.SortOrder" class="btn-filter @(Model.SelectedFilter == "DOUBLE"     ? "active" : "")">Çifte (@Model.DoubleSurpriseCount)</a>
+                    @if (fixturesMode)
+                    {
+                        <a asp-action="Index" asp-route-leagueId="@Model.SelectedLeagueId" asp-route-seasonId="@Model.SelectedSeasonId" asp-route-teamId="@Model.SelectedTeamId" asp-route-filter="ALL"        asp-route-sort="@Model.SortOrder" asp-route-view="@view" class="btn-filter @(Model.SelectedFilter == "ALL"        ? "active" : "")">Tüm Maçlar (@Model.TotalMatchesCount)</a>
+                        <a asp-action="Index" asp-route-leagueId="@Model.SelectedLeagueId" asp-route-seasonId="@Model.SelectedSeasonId" asp-route-teamId="@Model.SelectedTeamId" asp-route-filter="SURPRISE"   asp-route-sort="@Model.SortOrder" asp-route-view="@view" class="btn-filter @(Model.SelectedFilter == "SURPRISE"   ? "active" : "")">✅ Sürpriz</a>
+                        <a asp-action="Index" asp-route-leagueId="@Model.SelectedLeagueId" asp-route-seasonId="@Model.SelectedSeasonId" asp-route-teamId="@Model.SelectedTeamId" asp-route-filter="TURNAROUND" asp-route-sort="@Model.SortOrder" asp-route-view="@view" class="btn-filter @(Model.SelectedFilter == "TURNAROUND" ? "active" : "")">🟠 Dönüş (@Model.TurnaroundCount)</a>
+                        <a asp-action="Index" asp-route-leagueId="@Model.SelectedLeagueId" asp-route-seasonId="@Model.SelectedSeasonId" asp-route-teamId="@Model.SelectedTeamId" asp-route-filter="HIGH_GOAL"  asp-route-sort="@Model.SortOrder" asp-route-view="@view" class="btn-filter @(Model.SelectedFilter == "HIGH_GOAL"  ? "active" : "")">🔵 +6 Gol (@Model.HighGoalCount)</a>
+                        <a asp-action="Index" asp-route-leagueId="@Model.SelectedLeagueId" asp-route-seasonId="@Model.SelectedSeasonId" asp-route-teamId="@Model.SelectedTeamId" asp-route-filter="NORMAL"     asp-route-sort="@Model.SortOrder" asp-route-view="@view" class="btn-filter @(Model.SelectedFilter == "NORMAL"     ? "active" : "")">Normal</a>
+                    }
+                    else
+                    {
+                        <a asp-action="Index" asp-route-leagueId="@Model.SelectedLeagueId" asp-route-seasonId="@Model.SelectedSeasonId" asp-route-teamId="@Model.SelectedTeamId" asp-route-filter="ALL"        asp-route-sort="@Model.SortOrder" asp-route-view="@view" class="btn-filter @(Model.SelectedFilter == "ALL"        ? "active" : "")">Tüm Sürprizler (@Model.TotalMatchesCount)</a>
+                        <a asp-action="Index" asp-route-leagueId="@Model.SelectedLeagueId" asp-route-seasonId="@Model.SelectedSeasonId" asp-route-teamId="@Model.SelectedTeamId" asp-route-filter="TURNAROUND" asp-route-sort="@Model.SortOrder" asp-route-view="@view" class="btn-filter @(Model.SelectedFilter == "TURNAROUND" ? "active" : "")">Dönüş (@Model.TurnaroundCount)</a>
+                        <a asp-action="Index" asp-route-leagueId="@Model.SelectedLeagueId" asp-route-seasonId="@Model.SelectedSeasonId" asp-route-teamId="@Model.SelectedTeamId" asp-route-filter="HIGH_GOAL"  asp-route-sort="@Model.SortOrder" asp-route-view="@view" class="btn-filter @(Model.SelectedFilter == "HIGH_GOAL"  ? "active" : "")">+6 Goller (@Model.HighGoalCount)</a>
+                        <a asp-action="Index" asp-route-leagueId="@Model.SelectedLeagueId" asp-route-seasonId="@Model.SelectedSeasonId" asp-route-teamId="@Model.SelectedTeamId" asp-route-filter="DOUBLE"     asp-route-sort="@Model.SortOrder" asp-route-view="@view" class="btn-filter @(Model.SelectedFilter == "DOUBLE"     ? "active" : "")">Çifte (@Model.DoubleSurpriseCount)</a>
+                    }
                 </div>
                 <div class="d-flex gap-2">
-                    <a asp-action="Index" asp-route-leagueId="@Model.SelectedLeagueId" asp-route-seasonId="@Model.SelectedSeasonId" asp-route-teamId="@Model.SelectedTeamId" asp-route-filter="@Model.SelectedFilter" asp-route-sort="@nextWeekSort" class="btn-filter @(Model.SortOrder.StartsWith("week") ? "active" : "")">
+                    <a asp-action="Index" asp-route-leagueId="@Model.SelectedLeagueId" asp-route-seasonId="@Model.SelectedSeasonId" asp-route-teamId="@Model.SelectedTeamId" asp-route-filter="@Model.SelectedFilter" asp-route-sort="@nextWeekSort" asp-route-view="@view" class="btn-filter @(Model.SortOrder.StartsWith("week") ? "active" : "")">
                         Hafta @(Model.SortOrder == "week_asc" ? "⬆️" : "⬇️")
                     </a>
-                    <a asp-action="Index" asp-route-leagueId="@Model.SelectedLeagueId" asp-route-seasonId="@Model.SelectedSeasonId" asp-route-teamId="@Model.SelectedTeamId" asp-route-filter="@Model.SelectedFilter" asp-route-sort="@nextDateSort" class="btn-filter @(Model.SortOrder.StartsWith("date") ? "active" : "")">
+                    <a asp-action="Index" asp-route-leagueId="@Model.SelectedLeagueId" asp-route-seasonId="@Model.SelectedSeasonId" asp-route-teamId="@Model.SelectedTeamId" asp-route-filter="@Model.SelectedFilter" asp-route-sort="@nextDateSort" asp-route-view="@view" class="btn-filter @(Model.SortOrder.StartsWith("date") ? "active" : "")">
                         Tarih @(Model.SortOrder == "date_asc" ? "⬆️" : "⬇️")
                     </a>
                 </div>
             </div>
+
+            @if (fixturesMode && Model.TeamStats != null)
+            {
+                var ts = Model.TeamStats;
+                <div class="kpi-card shadow-sm border-secondary mb-3">
+                    <div class="d-flex flex-wrap align-items-center gap-4">
+                        <div>
+                            <div class="kpi-title text-light">@ts.TeamName — Sezon Özeti</div>
+                            <div class="fw-bold fs-5 text-white mt-1">@ts.Played O &nbsp;|&nbsp; @ts.Wins G - @ts.Draws B - @ts.Losses M</div>
+                        </div>
+                        <div>
+                            <div class="kpi-title text-light">Gol (A - Y)</div>
+                            <div class="fw-bold fs-6 mt-1"><span style="color:#38bdf8">@ts.GoalsFor</span> - <span style="color:#f87171">@ts.GoalsAgainst</span> <span class="text-secondary">(@(ts.GoalDiff > 0 ? "+" : "")@ts.GoalDiff)</span></div>
+                        </div>
+                        <div>
+                            <div class="kpi-title text-light">Maç Başı Gol</div>
+                            <div class="fw-bold fs-6 text-info mt-1">@ts.AvgTotalGoals.ToString("0.00")</div>
+                        </div>
+                        <div>
+                            <div class="kpi-title text-light">Ev (G-B-M)</div>
+                            <div class="fw-bold fs-6 text-white mt-1">@ts.HomeWins - @ts.HomeDraws - @ts.HomeLosses</div>
+                        </div>
+                        <div>
+                            <div class="kpi-title text-light">Deplasman (G-B-M)</div>
+                            <div class="fw-bold fs-6 text-white mt-1">@ts.AwayWins - @ts.AwayDraws - @ts.AwayLosses</div>
+                        </div>
+                        <div>
+                            <div class="kpi-title text-light">+6 Gol / Dönüş / Sürpriz</div>
+                            <div class="fw-bold fs-6 mt-1"><span style="color:#0284c7">@ts.HighGoalCount</span> / <span style="color:#ea580c">@ts.TurnaroundCount</span> / <span style="color:#a78bfa">@ts.SurpriseCount</span></div>
+                        </div>
+                    </div>
+                </div>
+            }
 
             <!-- MAÇ TABLOSU -->
             <div class="table-container shadow-sm">
@@ -385,7 +509,7 @@
                                 <th class="col-hafta">Hafta</th>
                                 <th class="col-tarih">
                                     <!-- Tıklanabilir Tarih Sütunu Başlığı -->
-                                    <a asp-action="Index" asp-route-leagueId="@Model.SelectedLeagueId" asp-route-seasonId="@Model.SelectedSeasonId" asp-route-filter="@Model.SelectedFilter" asp-route-sort="@nextDateSort" class="sort-header" title="Tarihe göre sırala">
+                                    <a asp-action="Index" asp-route-leagueId="@Model.SelectedLeagueId" asp-route-seasonId="@Model.SelectedSeasonId" asp-route-teamId="@Model.SelectedTeamId" asp-route-filter="@Model.SelectedFilter" asp-route-sort="@nextDateSort" asp-route-view="@view" class="sort-header" title="Tarihe göre sırala">
                                         Tarih @(Model.SortOrder == "date_desc" ? "▼" : "▲")
                                     </a>
                                 </th>
@@ -394,7 +518,7 @@
                                 <th class="col-ms">MS</th>
                                 <th class="col-sonuc">Sonuç</th>
                                 <th class="col-gol">Toplam Gol</th>
-                                <th class="col-durum">Sürpriz Durumu</th>
+                                <th class="col-durum">@(fixturesMode ? "Durum" : "Sürpriz Durumu")</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -402,7 +526,9 @@
                             {
                                 <tr>
                                     <td colspan="8" class="text-center py-5 text-secondary fw-semibold">
-                                        Seçili sezonda bu kritere uygun sürpriz maç kaydı bulunamadı.
+                                        @(fixturesMode
+                                            ? "Seçili lig/sezon için maç kaydı bulunamadı."
+                                            : "Seçili sezonda bu kritere uygun sürpriz maç kaydı bulunamadı.")
                                     </td>
                                 </tr>
                             }
@@ -443,6 +569,10 @@
                                         else if (match.SurpriseType == "HIGH_GOAL")
                                         {
                                             <span class="badge-highgoal">🔵 +6 GOL</span>
+                                        }
+                                        else if (fixturesMode)
+                                        {
+                                            <span class="text-secondary font-monospace">@match.MsResultCode</span>
                                         }
                                     </td>
                                 </tr>

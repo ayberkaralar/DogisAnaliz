@@ -10,39 +10,18 @@ public class SyncController : Controller
     private readonly AppDbContext   _context;
     private readonly FootballApiService _api;
     private readonly DogiService    _dogi;
+    private readonly FixtureScheduleService _schedule;
 
-    // Desteklenen ligler — API ID'leri
-    public static readonly LeagueConfig[] KnownLeagues =
+    // Desteklenen ligler/sezonlar Services/LeagueCatalog.cs içine taşındı
+    public static LeagueConfig[] KnownLeagues => LeagueCatalog.KnownLeagues;
+    public static int[] KnownSeasons => LeagueCatalog.KnownSeasons;
+
+    public SyncController(AppDbContext context, FootballApiService api, DogiService dogi, FixtureScheduleService schedule)
     {
-        // ── Birinci Liglar ──
-        new(39,  "Premier League",     "England",     true),
-        new(140, "La Liga",            "Spain",       false),
-        new(78,  "Bundesliga",         "Germany",     false),
-        new(135, "Serie A",            "Italy",       false),
-        new(61,  "Ligue 1",            "France",      false),
-        new(203, "Süper Lig",          "Turkey",      false),
-        new(88,  "Eredivisie",         "Netherlands", false),
-        new(94,  "Primeira Liga",      "Portugal",    false),
-
-        // ── İkinci / Diğer Liglar ──
-        new(79,  "2. Bundesliga",      "Germany",     false),
-        new(141, "La Liga 2",          "Spain",       false),
-        new(89,  "Eerste Divisie",     "Netherlands", false),
-
-        // ── Diğer Ülkeler ──
-        new(113, "Allsvenskan",        "Sweden",      false),
-        new(218, "Bundesliga",         "Austria",     false),
-        new(207, "Super League",       "Switzerland", false),
-    };
-
-    // Sezonlar: 2020-21 → 2026-27 (aktif)
-    public static readonly int[] KnownSeasons = { 2020, 2021, 2022, 2023, 2024, 2025, 2026 };
-
-    public SyncController(AppDbContext context, FootballApiService api, DogiService dogi)
-    {
-        _context = context;
-        _api     = api;
-        _dogi    = dogi;
+        _context  = context;
+        _api      = api;
+        _dogi     = dogi;
+        _schedule = schedule;
     }
 
     // ─────────────────────────────────────────────────────────
@@ -60,6 +39,13 @@ public class SyncController : Controller
             .Select(g => new { g.Key.LeagueId, g.Key.SeasonId, Count = g.Count() })
             .ToListAsync();
 
+        // Fikstür takvimi (oynanmamış maçlar dahil) sayıları
+        var scheduleCounts = await _context.FixtureSchedules
+            .AsNoTracking()
+            .GroupBy(f => new { f.LeagueId, f.SeasonId })
+            .Select(g => new { g.Key.LeagueId, g.Key.SeasonId, Count = g.Count() })
+            .ToListAsync();
+
         var leagues = await _context.Leagues.AsNoTracking().ToListAsync();
         var seasons = await _context.Seasons.AsNoTracking().ToListAsync();
 
@@ -74,15 +60,20 @@ public class SyncController : Controller
                 var dbSeason = seasons.FirstOrDefault(s => s.SeasonName == seasonName);
 
                 int matchCount = 0;
+                int scheduleCount = 0;
                 if (dbLeague != null && dbSeason != null)
                 {
                     var mc = matchCounts.FirstOrDefault(m =>
                         m.LeagueId == dbLeague.Id && m.SeasonId == dbSeason.Id);
                     matchCount = mc?.Count ?? 0;
+
+                    var sc = scheduleCounts.FirstOrDefault(s =>
+                        s.LeagueId == dbLeague.Id && s.SeasonId == dbSeason.Id);
+                    scheduleCount = sc?.Count ?? 0;
                 }
 
                 rows.Add(new SyncStatusRow(
-                    lc.ApiId, lc.Name, lc.Country, sy, seasonName, matchCount));
+                    lc.ApiId, lc.Name, lc.Country, sy, seasonName, matchCount, scheduleCount));
             }
         }
 
@@ -117,6 +108,57 @@ public class SyncController : Controller
         {
             TempData["SyncResult"] = $"❌ Hata: {ex.Message}";
         }
+        return RedirectToAction(nameof(Index));
+    }
+
+    // ─────────────────────────────────────────────────────────
+    // POST /Sync/Schedule — bir lig+sezonun FİKSTÜR TAKVİMİNİ çek
+    // (oynanmamış NS maçlar dahil). FixtureSchedule tablosuna upsert.
+    // ─────────────────────────────────────────────────────────
+    [HttpPost]
+    public async Task<IActionResult> Schedule(int apiLeagueId, int seasonYear, string leagueName)
+    {
+        try
+        {
+            Console.WriteLine($"[Sync] {leagueName} {seasonYear}-{seasonYear + 1} FİKSTÜR TAKVİMİ çekiliyor...");
+            var (added, updated, total) = await _schedule.SyncScheduleAsync(apiLeagueId, seasonYear);
+            TempData["SyncResult"] =
+                $"✅ {leagueName} {seasonYear}-{seasonYear + 1} fikstür takvimi: {total} maç işlendi " +
+                $"({added} yeni, {updated} güncellendi). Oynanmamış maçlar dahil.";
+        }
+        catch (Exception ex)
+        {
+            TempData["SyncResult"] = $"❌ Fikstür takvimi hatası: {ex.Message}";
+        }
+        return RedirectToAction(nameof(Index));
+    }
+
+    // ─────────────────────────────────────────────────────────
+    // POST /Sync/RefreshAllActive — TÜM liglerin AKTİF sezonunu güncelle
+    // (Ana Sayfa'daki "Senkronize Et" butonu buraya gönderir)
+    // ─────────────────────────────────────────────────────────
+    [HttpPost]
+    public async Task<IActionResult> RefreshAllActive(string? returnUrl = null)
+    {
+        try
+        {
+            Console.WriteLine("[Sync] Tüm liglerin aktif sezonu güncelleniyor...");
+            var r = await ActiveSeasonRefresher.RefreshAsync(
+                _context, _api, _dogi,
+                log: msg => Console.WriteLine($"[Sync] {msg}"));
+
+            var msg = $"✅ Aktif sezon güncellendi — {r.LeaguesProcessed} lig tarandı, {r.MatchesAdded} yeni maç eklendi.";
+            if (r.MatchesAdded > 0) msg += " Dogi taraması yenilendi.";
+            if (r.Errors.Count > 0) msg += $" ⚠️ Hatalar: {string.Join(", ", r.Errors)}";
+            TempData["SyncResult"] = msg;
+        }
+        catch (Exception ex)
+        {
+            TempData["SyncResult"] = $"❌ Senkronizasyon hatası: {ex.Message}";
+        }
+
+        if (!string.IsNullOrEmpty(returnUrl) && Url.IsLocalUrl(returnUrl))
+            return Redirect(returnUrl);
         return RedirectToAction(nameof(Index));
     }
 
@@ -180,10 +222,10 @@ public class SyncController : Controller
 }
 
 // ─── Yardımcı record'lar ────────────────────────────────────
-public record LeagueConfig(int ApiId, string Name, string Country, bool IsPriority);
 public record SyncStatusRow(int ApiId, string LeagueName, string Country,
-    int SeasonYear, string SeasonName, int MatchCount)
+    int SeasonYear, string SeasonName, int MatchCount, int ScheduleCount = 0)
 {
     public bool IsSynced  => MatchCount > 0;
     public bool IsActive  => SeasonYear == 2026;
+    public bool HasSchedule => ScheduleCount > 0;
 }

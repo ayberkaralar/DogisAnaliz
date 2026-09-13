@@ -1,0 +1,241 @@
+@model DogisAnaliz.Models.Bilgi1ViewModel
+@{
+    ViewData["Title"] = "BİLGİ 1 — Fikstür Deseni";
+}
+
+<style>
+    body { background:#0b1120; color:#e2e8f0; font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif; }
+    .b1 { max-width:1200px; margin:0 auto; padding:0 16px; }
+
+    .b1-head { display:flex; align-items:baseline; gap:12px; flex-wrap:wrap; margin:22px 0 6px; }
+    .b1-head h4 { font-weight:800; letter-spacing:.5px; margin:0; }
+    .b1-head .sub { color:#94a3b8; font-size:.92rem; }
+
+    .b1-note { color:#8ca0b8; font-size:.82rem; line-height:1.55; margin-bottom:18px; border-left:3px solid #0ea5e9; padding-left:12px; }
+
+    .b1-bar { display:flex; gap:14px; flex-wrap:wrap; align-items:center; margin-bottom:18px; }
+    .b1-bar label { color:#94a3b8; font-size:.8rem; font-weight:600; text-transform:uppercase; letter-spacing:.04em; }
+    .b1-bar select { background:#131c2e; color:#e2e8f0; border:1px solid #2b3a52; border-radius:9px; padding:7px 13px; font-weight:600; font-size:.9rem; }
+    .b1-bar select:focus { outline:none; border-color:#0ea5e9; }
+
+    .b1-kpis { display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin-bottom:14px; }
+    @@media (max-width:720px){ .b1-kpis { grid-template-columns:repeat(2,1fr); } }
+    .kpi { background:#131c2e; border:1px solid #223049; border-radius:12px; padding:14px 16px; }
+    .kpi .k { font-size:.72rem; color:#8ca0b8; text-transform:uppercase; letter-spacing:.05em; font-weight:700; }
+    .kpi .v { font-size:1.7rem; font-weight:800; margin-top:3px; line-height:1; }
+    .kpi .s { font-size:.74rem; color:#64748b; margin-top:4px; }
+
+    .verdict { border-radius:11px; padding:12px 16px; margin-bottom:22px; font-size:.9rem; font-weight:600; }
+
+    .season { margin-bottom:22px; }
+    .season-hd { display:flex; align-items:baseline; gap:14px; padding:9px 4px; border-bottom:2px solid #0ea5e9; margin-bottom:2px; }
+    .season-hd .yr { font-size:1.05rem; font-weight:800; color:#7dd3fc; letter-spacing:.5px; }
+    .season-hd .meta { font-size:.8rem; color:#8ca0b8; }
+
+    table.grid { width:100%; border-collapse:collapse; }
+    table.grid th { text-align:left; font-size:.72rem; text-transform:uppercase; letter-spacing:.05em; color:#7d8ea6; font-weight:700; padding:9px 10px; }
+    table.grid td { padding:11px 10px; border-top:1px solid #1c2740; font-size:.9rem; }
+    table.grid tr:hover td { background:#111a2c; }
+    tr.turn td { background:rgba(234,88,12,.08); }
+    tr.turn td:first-child { box-shadow:inset 3px 0 0 #ea580c; }
+
+    .wk { font-weight:800; color:#cbd5e1; width:42px; }
+    .pivot { font-weight:700; color:#f1f5f9; }
+    .pivot .vs { color:#64748b; font-weight:500; margin:0 4px; }
+    .mono { font-family:ui-monospace,Menlo,Consolas,monospace; }
+    .ht { color:#38bdf8; font-weight:700; }
+    .ft { color:#fff; font-weight:800; }
+    .code { color:#fbbf24; font-weight:800; }
+    .trig { color:#93c5fd; }
+    .trig .pair { color:#7dd3fc; }
+    .trig .arrow { color:#475569; margin:0 6px; }
+    .trig .res { color:#fbbf24; font-weight:700; font-family:ui-monospace,monospace; }
+    .tag-turn { display:inline-block; background:#ea580c; color:#fff; padding:3px 9px; border-radius:999px; font-size:.72rem; font-weight:800; letter-spacing:.03em; }
+    .tag-dash { color:#3f4b60; }
+    .empty { text-align:center; color:#64748b; padding:26px 0; }
+</style>
+
+<div class="b1">
+    <div class="b1-head">
+        <h4>1️⃣ BİLGİ 1</h4>
+        <span class="sub">@LeagueDisplayHelper.ToTurkish(Model.SelectedLeagueName) · @Model.SelectedSeasonName</span>
+    </div>
+
+    <div class="b1-note">
+        <b>DÖNÜŞ nedir?</b> İlk yarıyı önde bitiren takımın maçı kaybetmesi (İY/MS kodu 1/2 veya 2/1).<br>
+        <b>BİLGİ 1 ne arar?</b> İki takım (A ve B) bir hafta karşılaşır — <b>pivot maç</b>.
+        A'nın <b>bir önceki haftaki</b> rakibine <b>X</b>, B'nin <b>bir önceki haftaki</b> rakibine <b>Y</b> diyelim.
+        Eğer <b>X ile Y</b> daha önce (bu sezon, pivot maçtan önceki herhangi bir hafta) <b>kendi aralarında</b> DÖNÜŞ
+        çıkarmışsa → desen tutar. Ev/deplasman ve sıra önemsiz.<br>
+        <b>Örnek:</b> Premier Lig 2024-25, 24. hafta <b>Fulham – Newcastle</b> (pivot, 1/2 dönüşle bitti).
+        23. haftada Newcastle'ın rakibi <b>Southampton</b> (X), Fulham'ın rakibi <b>Manchester United</b> (Y).
+        Man Utd ile Southampton 21. haftada <b>2/1</b> (dönüş) oynamıştı → desen tuttu.<br>
+        <b>İzlenen çıktı:</b> pivot maç DÖNÜŞ oldu mu? (+6 gol bu analize dahil değil.)
+    </div>
+
+    @if (Model.Leagues.Count == 0)
+    {
+        <div class="empty">Henüz maç verisi yok.</div>
+    }
+    else
+    {
+        <form method="get" action="/Bilgi1" class="b1-bar">
+            <span><label>Lig</label>&nbsp;
+                <select name="leagueId" onchange="this.form.submit()">
+                    @foreach (var l in Model.Leagues)
+                    {
+                        <option value="@l.Id" selected="@(l.Id == Model.SelectedLeagueId)">@LeagueDisplayHelper.ToTurkish(l.Name)</option>
+                    }
+                </select>
+            </span>
+            <span><label>Sezon</label>&nbsp;
+                <select name="seasonId" onchange="this.form.submit()">
+                    <option value="" selected="@Model.AllSeasons">Tüm sezonlar</option>
+                    @foreach (var s in Model.Seasons)
+                    {
+                        <option value="@s.Id" selected="@(s.Id == Model.SelectedSeasonId)">@s.SeasonName</option>
+                    }
+                </select>
+            </span>
+        </form>
+
+        <div class="b1-kpis">
+            <div class="kpi">
+                <div class="k">İncelenen maç</div>
+                <div class="v" style="color:#e2e8f0">@Model.EligiblePivotCount</div>
+                <div class="s">bir önceki hafta rakibi belli olan oynanmış pivot maç</div>
+            </div>
+            <div class="kpi">
+                <div class="k">Genel dönüş oranı</div>
+                <div class="v" style="color:#94a3b8">%@Model.BaseTurnaroundRate</div>
+                <div class="s">bu maçların @Model.EligibleTurnaroundCount tanesi dönüş → kıyas noktası</div>
+            </div>
+            <div class="kpi">
+                <div class="k">Deseni tutan maç</div>
+                <div class="v" style="color:#7dd3fc">@Model.Bilgi1Count</div>
+                <div class="s">BİLGİ 1 koşulunu sağlayan oynanmış maç</div>
+            </div>
+            <div class="kpi">
+                <div class="k">Bunların dönüş oranı</div>
+                <div class="v" style="color:#fb923c">%@Model.Bilgi1TurnaroundRate</div>
+                <div class="s">@Model.Bilgi1TurnaroundCount / @Model.Bilgi1Count — genel oranla kıyasla</div>
+            </div>
+        </div>
+
+        @if (Model.Bilgi1Count == 0)
+        {
+            <div class="verdict" style="background:#131c2e; color:#8ca0b8;">Bu seçimde oynanmış BİLGİ 1 maçı yok@(Model.PendingRows.Count > 0 ? " — aşağıda bekleyen tahminler var." : ".")</div>
+        }
+        else if (Model.RateDiff >= 3)
+        {
+            <div class="verdict" style="background:#14361f; color:#bbf7d0;">
+                BİLGİ 1 maçlarında dönüş oranı (%@Model.Bilgi1TurnaroundRate) taban orandan (%@Model.BaseTurnaroundRate) yüksek — fark +%@Model.RateDiff. Örneklem küçükse temkinli yorumla.
+            </div>
+        }
+        else if (Model.RateDiff <= -3)
+        {
+            <div class="verdict" style="background:#3a1d12; color:#fed7aa;">
+                BİLGİ 1 maçlarında dönüş oranı (%@Model.Bilgi1TurnaroundRate) taban orandan (%@Model.BaseTurnaroundRate) düşük — fark %@Model.RateDiff.
+            </div>
+        }
+        else
+        {
+            <div class="verdict" style="background:#131c2e; color:#8ca0b8;">
+                BİLGİ 1 dönüş oranı (%@Model.Bilgi1TurnaroundRate) taban oranla (%@Model.BaseTurnaroundRate) pratikte aynı — bu seçimde öngörü avantajı zayıf.
+            </div>
+        }
+
+        @if (Model.PendingRows.Count > 0)
+        {
+            <div class="season">
+                <div class="season-hd" style="border-bottom-color:#f59e0b;">
+                    <span class="yr" style="color:#fcd34d;">🔮 Bekleyen Tahminler</span>
+                    <span class="meta">aktif sezonda deseni tutan, henüz oynanmamış @Model.PendingRows.Count maç</span>
+                </div>
+                <table class="grid">
+                    <thead>
+                        <tr>
+                            <th>Hf</th>
+                            <th>Tarih (TSİ)</th>
+                            <th>Pivot Maç (A – B)</th>
+                            <th>Tetikleyici: bir önceki hafta rakipleri → aralarındaki dönüş maçı</th>
+                            <th>Beklenti</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var r in Model.PendingRows)
+                        {
+                            <tr>
+                                <td class="wk">@r.Week</td>
+                                <td class="mono" style="color:#cbd5e1;">@(r.KickoffTr?.ToString("dd.MM.yyyy HH:mm") ?? "-")</td>
+                                <td class="pivot">@r.TeamA<span class="vs">–</span>@r.TeamB</td>
+                                <td class="trig">
+                                    <span class="pair">@r.OppX &amp; @r.OppY</span>
+                                    <span class="arrow">→</span>
+                                    <span>@($"H{r.TriggerWeek}")</span> <span class="res">@r.TriggerIyMs</span> (@r.TriggerFt)
+                                </td>
+                                <td><span class="tag-turn" style="background:#b45309;">DÖNÜŞ olabilir</span></td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+
+        @foreach (var grp in Model.Rows.GroupBy(r => r.SeasonName))
+        {
+            var turnInSeason = grp.Count(x => x.IsTurnaround);
+            <div class="season">
+                <div class="season-hd">
+                    <span class="yr">@grp.Key</span>
+                    <span class="meta">@grp.Count() desen · @turnInSeason dönüş</span>
+                </div>
+                <table class="grid">
+                    <thead>
+                        <tr>
+                            <th>Hf</th>
+                            <th>Pivot Maç (A – B)</th>
+                            <th>İY</th>
+                            <th>MS</th>
+                            <th>Kod</th>
+                            <th>Tetikleyici: bir önceki hafta rakipleri → aralarındaki dönüş maçı</th>
+                            <th>Durum</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var r in grp)
+                        {
+                            <tr class="@(r.IsTurnaround ? "turn" : "")">
+                                <td class="wk">@r.Week</td>
+                                <td class="pivot">@r.TeamA<span class="vs">–</span>@r.TeamB</td>
+                                <td class="mono ht">@r.HtScore</td>
+                                <td class="mono ft">@r.FtScore</td>
+                                <td class="mono code">@r.IyMsCode</td>
+                                <td class="trig">
+                                    <span class="pair">@r.OppX &amp; @r.OppY</span>
+                                    <span class="arrow">→</span>
+                                    <span>@($"H{r.TriggerWeek}")</span> <span class="res">@r.TriggerIyMs</span> (@r.TriggerFt)
+                                </td>
+                                <td>
+                                    @if (r.IsTurnaround)
+                                    {
+                                        <span class="tag-turn">DÖNÜŞ</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="tag-dash">—</span>
+                                    }
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+
+        @if (Model.Rows.Count == 0 && Model.PendingRows.Count == 0)
+        {
+            <div class="empty">Bu seçimde BİLGİ 1 deseni bulunamadı.</div>
+        }
+    }
+</div>

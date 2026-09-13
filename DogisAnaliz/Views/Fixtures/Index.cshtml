@@ -1,0 +1,155 @@
+@model DogisAnaliz.Models.FixtureCalendarViewModel
+@{
+    ViewData["Title"] = "Fikstür Takvimi";
+}
+
+<style>
+    body { background-color:#0b1120; color:#f8fafc; font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif; }
+    .fx-header { background:linear-gradient(135deg,#1e3a5f,#2563eb); color:#fff; border-radius:12px; padding:18px 22px; margin-bottom:18px; }
+    .fx-filter { background:#1e293b; border:1px solid #334155; border-radius:12px; padding:14px 18px; margin-bottom:18px; display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
+    .fx-filter select { background:#0f172a; color:#f8fafc; border:1px solid #475569; border-radius:8px; padding:6px 12px; font-weight:600; font-size:0.9rem; }
+    .fx-filter select:focus { border-color:#3b82f6; outline:none; }
+    .fx-kpi { display:flex; gap:12px; flex-wrap:wrap; margin-bottom:18px; }
+    .fx-kpi .card { background:#1e293b; border:1px solid #334155; border-radius:12px; padding:12px 18px; min-width:130px; }
+    .fx-kpi .lbl { font-size:0.8rem; color:#94a3b8; text-transform:uppercase; letter-spacing:0.05em; font-weight:600; }
+    .fx-kpi .val { font-size:1.6rem; font-weight:bold; margin-top:2px; }
+    .fx-table-wrap { background:#1e293b; border:1px solid #334155; border-radius:12px; padding:14px 18px; }
+    table.fx { width:100%; border-collapse:separate; border-spacing:0 5px; }
+    table.fx th { color:#cbd5e1; font-weight:700; padding:10px 12px; border-bottom:2px solid #334155; text-align:left; font-size:0.85rem; text-transform:uppercase; }
+    table.fx td { background:#0f172a; padding:11px 12px; vertical-align:middle; border-top:1px solid #1e293b; border-bottom:1px solid #1e293b; }
+    table.fx tr td:first-child { border-top-left-radius:8px; border-bottom-left-radius:8px; }
+    table.fx tr td:last-child { border-top-right-radius:8px; border-bottom-right-radius:8px; }
+    .wk-row td { background:transparent; border:none; padding:16px 4px 4px; font-weight:800; color:#38bdf8; font-size:0.95rem; letter-spacing:0.05em; }
+    .cell-dt { color:#f1f5f9; font-weight:600; font-size:0.9rem; white-space:nowrap; }
+    .cell-sc { color:#fff; font-weight:800; text-align:center; white-space:nowrap; }
+    .cell-sc.empty { color:#64748b; }
+    .badge-ns { background:#334155; color:#cbd5e1; padding:4px 10px; border-radius:6px; font-size:0.75rem; font-weight:700; }
+    .badge-ft { background:#166534; color:#dcfce7; padding:4px 10px; border-radius:6px; font-size:0.75rem; font-weight:700; }
+    .badge-ot { background:#7c2d12; color:#fed7aa; padding:4px 10px; border-radius:6px; font-size:0.75rem; font-weight:700; }
+    .team-hl { color:#fb923c; font-weight:700; }
+</style>
+
+<div class="container-fluid mt-3 mb-5">
+    <div class="fx-header">
+        <h4 class="mb-1">📅 Fikstür Takvimi</h4>
+        <small>@LeagueDisplayHelper.ToTurkish(Model.SelectedLeagueName) — @Model.SelectedSeasonName · oynanmamış maçlar dahil</small>
+    </div>
+
+    @if (Model.Leagues.Count == 0)
+    {
+        <div class="fx-table-wrap">
+            Henüz fikstür takvimi çekilmemiş. <a href="/Sync" class="text-info">Veri Çek</a> sayfasından
+            "📅 Fikstür Takvimi" butonuyla çekebilirsin.
+        </div>
+    }
+    else
+    {
+        <form method="get" action="/Fixtures" class="fx-filter">
+            <label class="small fw-semibold">Lig:</label>
+            <select name="leagueId" onchange="this.form.submit()">
+                @foreach (var l in Model.Leagues)
+                {
+                    <option value="@l.Id" selected="@(l.Id == Model.SelectedLeagueId)">
+                        @LeagueDisplayHelper.ToTurkish(l.Name) (@l.Count)
+                    </option>
+                }
+            </select>
+
+            <label class="small fw-semibold ms-2">Sezon:</label>
+            <select name="seasonId" onchange="this.form.submit()">
+                @foreach (var s in Model.Seasons)
+                {
+                    <option value="@s.Id" selected="@(s.Id == Model.SelectedSeasonId)">@s.SeasonName</option>
+                }
+            </select>
+
+            <label class="small fw-semibold ms-2">Hafta:</label>
+            <select name="week" onchange="this.form.submit()">
+                <option value="" selected="@(!Model.SelectedWeek.HasValue)">Tümü</option>
+                @foreach (var w in Model.Weeks)
+                {
+                    <option value="@w" selected="@(Model.SelectedWeek == w)">@w. hafta</option>
+                }
+            </select>
+
+            <label class="small fw-semibold ms-2">Takım:</label>
+            <select name="teamId" onchange="this.form.submit()">
+                <option value="" selected="@(!Model.SelectedTeamId.HasValue)">Tüm takımlar</option>
+                @foreach (var t in Model.Teams)
+                {
+                    <option value="@t.Id" selected="@(Model.SelectedTeamId == t.Id)">@t.Name</option>
+                }
+            </select>
+
+            <label class="small fw-semibold ms-2">Durum:</label>
+            <select name="status" onchange="this.form.submit()">
+                <option value="ALL" selected="@(Model.SelectedStatus == "ALL")">Tümü</option>
+                <option value="NS" selected="@(Model.SelectedStatus == "NS")">Oynanmamış</option>
+                <option value="PLAYED" selected="@(Model.SelectedStatus == "PLAYED")">Oynanmış</option>
+            </select>
+
+            @if (Model.SelectedTeamId.HasValue || Model.SelectedWeek.HasValue || Model.SelectedStatus != "ALL")
+            {
+                <a href="/Fixtures?leagueId=@Model.SelectedLeagueId&seasonId=@Model.SelectedSeasonId"
+                   class="btn btn-sm btn-outline-secondary">Temizle</a>
+            }
+        </form>
+
+        <div class="fx-kpi">
+            <div class="card"><div class="lbl">Toplam</div><div class="val text-white">@Model.TotalCount</div></div>
+            <div class="card"><div class="lbl">Oynanmış</div><div class="val" style="color:#4ade80">@Model.PlayedCount</div></div>
+            <div class="card"><div class="lbl">Oynanmamış</div><div class="val" style="color:#38bdf8">@Model.NotPlayedCount</div></div>
+        </div>
+
+        <div class="fx-table-wrap">
+            <div class="table-responsive">
+                <table class="fx">
+                    <thead>
+                        <tr>
+                            <th style="width:150px;">Tarih (TSİ)</th>
+                            <th>Ev Sahibi</th>
+                            <th style="width:70px; text-align:center;">Skor</th>
+                            <th>Deplasman</th>
+                            <th style="width:110px; text-align:center;">Durum</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @if (Model.Rows.Count == 0)
+                        {
+                            <tr><td colspan="5" class="text-center py-4 text-secondary">Bu kritere uygun maç yok.</td></tr>
+                        }
+                        @{ int? shownWeek = null; }
+                        @foreach (var r in Model.Rows)
+                        {
+                            if (shownWeek != r.Week)
+                            {
+                                shownWeek = r.Week;
+                                <tr class="wk-row"><td colspan="5">@r.Week. HAFTA</td></tr>
+                            }
+                            <tr>
+                                <td class="cell-dt">@r.KickoffTr.ToString("dd.MM.yyyy HH:mm")</td>
+                                <td class="@(Model.SelectedTeamId.HasValue && r.IsHomeTeam ? "team-hl" : "")">@r.HomeTeam</td>
+                                <td class="cell-sc @(r.HomeGoals.HasValue ? "" : "empty")">@r.ScoreText</td>
+                                <td class="@(Model.SelectedTeamId.HasValue && !r.IsHomeTeam ? "team-hl" : "")">@r.AwayTeam</td>
+                                <td style="text-align:center;">
+                                    @if (r.Status == "FT")
+                                    {
+                                        <span class="badge-ft">Bitti</span>
+                                    }
+                                    else if (r.Status == "NS")
+                                    {
+                                        <span class="badge-ns">Oynanmadı</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="badge-ot">@r.Status</span>
+                                    }
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    }
+</div>

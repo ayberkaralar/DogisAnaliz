@@ -14,6 +14,7 @@ public class AppDbContext : DbContext
     public DbSet<MatchSurprise> MatchSurprises => Set<MatchSurprise>();
     public DbSet<MatchDetail> MatchDetails => Set<MatchDetail>();
     public DbSet<DogiPattern> DogiPatterns => Set<DogiPattern>();
+    public DbSet<FixtureSchedule> FixtureSchedules => Set<FixtureSchedule>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -108,5 +109,33 @@ public class AppDbContext : DbContext
 
         modelBuilder.Entity<DogiPattern>()
             .HasIndex(d => d.AlertResult);
+
+        // FixtureSchedule — fikstür takvimi (oynanmamış maçlar dahil)
+        modelBuilder.Entity<FixtureSchedule>(e =>
+        {
+            e.HasIndex(f => f.ApiFixtureId).IsUnique();
+            e.HasIndex(f => new { f.LeagueId, f.SeasonId, f.Week });
+            e.HasIndex(f => f.KickoffUtc);
+
+            e.HasOne(f => f.League)
+                .WithMany()
+                .HasForeignKey(f => f.LeagueId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            e.HasOne(f => f.Season)
+                .WithMany()
+                .HasForeignKey(f => f.SeasonId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            e.HasOne(f => f.HomeTeam)
+                .WithMany()
+                .HasForeignKey(f => f.HomeTeamId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            e.HasOne(f => f.AwayTeam)
+                .WithMany()
+                .HasForeignKey(f => f.AwayTeamId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
     }
 }

@@ -90,6 +90,15 @@
     <small class="text-muted ms-2">Örn: "west ham" → "West Ham"</small>
 </form>
 
+<!-- Kopya maçları temizle -->
+<form method="post" action="/Admin/DedupeMatches" class="mb-3">
+    @Html.AntiForgeryToken()
+    <button type="submit" class="btn btn-outline-danger btn-sm">
+        🧹 Duplicate Maçları Temizle
+    </button>
+    <small class="text-muted ms-2">Bir takım birleştirmesi sonucu aynı lig+sezon+hafta+ev+deplasman için iki satır kalmışsa temizler.</small>
+</form>
+
 @if (!duplicates.Any())
 {
     <div class="alert alert-success">✅ Otomatik tespit: Duplicate bulunamadı.</div>
