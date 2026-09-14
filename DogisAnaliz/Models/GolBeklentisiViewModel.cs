@@ -17,6 +17,12 @@ public class GolBeklentisiViewModel
     public string SelectedLeagueName { get; set; } = string.Empty;
     public string SelectedSeasonName { get; set; } = string.Empty;
 
+    /// <summary>Takım filtresi seçiliyse: <see cref="WindowFixtures"/> artık 2 haftalık global
+    /// pencere değil, bu takımın SEZON BOYUNCA tüm maçları (geçmiş + kalan) olur.</summary>
+    public int? SelectedTeamId { get; set; }
+    public string SelectedTeamName { get; set; } = string.Empty;
+    public bool IsTeamFiltered => SelectedTeamId.HasValue;
+
     /// <summary>Kullanıcının girdiği tarih (yoksa bugün varsayılır).</summary>
     public DateTime? SelectedDate { get; set; }
     public int WindowWeekStart { get; set; }
@@ -62,6 +68,11 @@ public class GbTeamDto
     public double Blended { get; set; }     // 0.5*kariyer + 0.5*son10
     public int Played { get; set; }
     public bool LowData { get; set; }
+
+    // api-sports "teams/statistics" senkronize edildiyse dolu — ev/deplasman AYRI ortalama
+    // (bizim Blended hesabımız ev/deplasman ayrımı yapmaz, bu karşılaştırma/ek bilgi içindir).
+    public double? ApiGoalsForAvgHome { get; set; }
+    public double? ApiGoalsForAvgAway { get; set; }
 }
 
 public class GbFixtureDto
@@ -91,4 +102,12 @@ public class GbFixtureDto
     public double Plus6Rate { get; set; }
     public double Plus5Rate { get; set; }
     public bool LowData { get; set; }
+
+    // api-sports'un KENDİ tahmini (Sync ekranındaki "🔮 Tahminler" ile çekilir) — sadece
+    // yakın vadeli, oynanmamış maçlar için doldurulur. Bizim modelimizi değiştirmez, sadece
+    // yan yana karşılaştırma içindir.
+    public double? ApiPercentHome { get; set; }
+    public double? ApiPercentDraw { get; set; }
+    public double? ApiPercentAway { get; set; }
+    public string? ApiAdvice { get; set; }
 }

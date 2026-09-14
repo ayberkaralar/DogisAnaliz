@@ -1,4 +1,5 @@
 using DogisAnaliz.Data;
+using DogisAnaliz.Models;
 using DogisAnaliz.Services;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -11,17 +12,24 @@ public class SyncController : Controller
     private readonly FootballApiService _api;
     private readonly DogiService    _dogi;
     private readonly FixtureScheduleService _schedule;
+    private readonly StandingsService _standings;
+    private readonly TeamStatisticsService _teamStats;
+    private readonly PredictionService _predictions;
 
     // Desteklenen ligler/sezonlar Services/LeagueCatalog.cs içine taşındı
     public static LeagueConfig[] KnownLeagues => LeagueCatalog.KnownLeagues;
     public static int[] KnownSeasons => LeagueCatalog.KnownSeasons;
 
-    public SyncController(AppDbContext context, FootballApiService api, DogiService dogi, FixtureScheduleService schedule)
+    public SyncController(AppDbContext context, FootballApiService api, DogiService dogi, FixtureScheduleService schedule,
+        StandingsService standings, TeamStatisticsService teamStats, PredictionService predictions)
     {
-        _context  = context;
-        _api      = api;
-        _dogi     = dogi;
-        _schedule = schedule;
+        _context     = context;
+        _api         = api;
+        _dogi        = dogi;
+        _schedule    = schedule;
+        _standings   = standings;
+        _teamStats   = teamStats;
+        _predictions = predictions;
     }
 
     // ─────────────────────────────────────────────────────────
@@ -134,6 +142,63 @@ public class SyncController : Controller
     }
 
     // ─────────────────────────────────────────────────────────
+    // POST /Sync/TeamStats — bir lig+sezonun TAKIM İSTATİSTİKLERİNİ çek (teams/statistics)
+    // Takım başına 1 çağrı — Senkronize Et'e dahil değil, elle tetiklenir.
+    // ─────────────────────────────────────────────────────────
+    [HttpPost]
+    public async Task<IActionResult> TeamStats(int apiLeagueId, int seasonYear, string leagueName)
+    {
+        try
+        {
+            Console.WriteLine($"[Sync] {leagueName} {seasonYear}-{seasonYear + 1} TAKIM İSTATİSTİKLERİ çekiliyor...");
+            var (synced, skipped) = await _teamStats.SyncLeagueSeasonAsync(apiLeagueId, seasonYear);
+            TempData["SyncResult"] = $"✅ {leagueName} {seasonYear}-{seasonYear + 1} takım istatistikleri: {synced} takım güncellendi." +
+                (skipped > 0 ? $" ⚠️ {skipped} takım atlandı (ApiTeamId yok — önce maç/fikstür senkronu gerekir)." : "");
+        }
+        catch (Exception ex)
+        {
+            TempData["SyncResult"] = $"❌ Takım istatistikleri hatası: {ex.Message}";
+        }
+        return RedirectToAction(nameof(Index));
+    }
+
+    // ─────────────────────────────────────────────────────────
+    // POST /Sync/Predictions — bir lig+sezonun YAKIN VADELİ (varsayılan ~2 hafta) oynanmamış
+    // maçları için api-sports'un kendi tahminini çek. Maç başına 1 çağrı.
+    // ─────────────────────────────────────────────────────────
+    [HttpPost]
+    public async Task<IActionResult> Predictions(int apiLeagueId, int seasonYear, string leagueName)
+    {
+        try
+        {
+            // LeagueCatalog'tan apiLeagueId'nin Name+Country'sini önce C# tarafında bul, sonra
+            // basit bir sorguyla eşleştir (EF Core, in-memory dizi + Contains kombinasyonunu
+            // SQL'e çeviremiyor — bkz. TeamStatisticsService'teki aynı düzeltme).
+            var leagueConfig = LeagueCatalog.KnownLeagues.FirstOrDefault(k => k.ApiId == apiLeagueId);
+            League? league = leagueConfig == null ? null : await _context.Leagues.AsNoTracking()
+                .FirstOrDefaultAsync(l => l.Name == leagueConfig.Name && l.Country == leagueConfig.Country);
+            string seasonName = $"{seasonYear}-{seasonYear + 1}";
+            var season = await _context.Seasons.AsNoTracking().FirstOrDefaultAsync(s => s.SeasonName == seasonName);
+
+            if (league == null || season == null)
+            {
+                TempData["SyncResult"] = "❌ Önce bu lig+sezon için fikstür takvimi senkronize edilmeli.";
+                return RedirectToAction(nameof(Index));
+            }
+
+            Console.WriteLine($"[Sync] {leagueName} {seasonName} TAHMİNLER çekiliyor...");
+            var (synced, skipped, errors) = await _predictions.SyncUpcomingAsync(league.Id, season.Id);
+            TempData["SyncResult"] = $"✅ {leagueName} {seasonName} tahminler: {synced} maç güncellendi, {skipped} zaten güncel atlandı." +
+                (errors > 0 ? $" ⚠️ {errors} hata." : "");
+        }
+        catch (Exception ex)
+        {
+            TempData["SyncResult"] = $"❌ Tahmin senkronu hatası: {ex.Message}";
+        }
+        return RedirectToAction(nameof(Index));
+    }
+
+    // ─────────────────────────────────────────────────────────
     // POST /Sync/RefreshAllActive — TÜM liglerin AKTİF sezonunu güncelle
     // (Ana Sayfa'daki "Senkronize Et" butonu buraya gönderir)
     // ─────────────────────────────────────────────────────────
@@ -144,7 +209,7 @@ public class SyncController : Controller
         {
             Console.WriteLine("[Sync] Tüm liglerin aktif sezonu güncelleniyor...");
             var r = await ActiveSeasonRefresher.RefreshAsync(
-                _context, _api, _dogi,
+                _context, _api, _dogi, _standings,
                 log: msg => Console.WriteLine($"[Sync] {msg}"));
 
             var msg = $"✅ Aktif sezon güncellendi — {r.LeaguesProcessed} lig tarandı, {r.MatchesAdded} yeni maç eklendi.";

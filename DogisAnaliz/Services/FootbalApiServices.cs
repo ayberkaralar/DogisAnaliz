@@ -73,6 +73,8 @@ public class FootballApiService
                     teamsData.GetProperty("home").GetProperty("name").GetString()!);
                 string awayTeamName = TeamNameNormalizer.Normalize(
                     teamsData.GetProperty("away").GetProperty("name").GetString()!);
+                int apiHomeTeamId = teamsData.GetProperty("home").GetProperty("id").GetInt32();
+                int apiAwayTeamId = teamsData.GetProperty("away").GetProperty("id").GetInt32();
 
                 var htHomeEl = scoreData.GetProperty("halftime").GetProperty("home");
                 var htAwayEl = scoreData.GetProperty("halftime").GetProperty("away");
@@ -116,26 +118,47 @@ public class FootballApiService
                     existingSeasons[seasonName] = season;
                 }
 
-                // Ev Sahibi Takım — normalize key ile ara
+                // Ev Sahibi Takım — normalize key ile ara; tam eşleşme yoksa güvenli kısa/uzun ad
+                // eşleşmesine bak (bkz. TeamNameNormalizer.FindSafeFuzzyMatch) — yoksa api-sports
+                // farklı bir ad döndürdüğünde her senkronizasyonda aynı duplicate takım geri gelir.
                 if (!existingTeams.TryGetValue(homeTeamName.ToLower(), out var homeTeam))
                 {
-                    homeTeam = new Team { Name = homeTeamName };
-                    _context.Teams.Add(homeTeam);
-                    await _context.SaveChangesAsync();
+                    homeTeam = TeamNameNormalizer.FindSafeFuzzyMatch(homeTeamName, existingTeams.Values);
+                    if (homeTeam == null)
+                    {
+                        homeTeam = new Team { Name = homeTeamName };
+                        _context.Teams.Add(homeTeam);
+                        await _context.SaveChangesAsync();
+                    }
                     existingTeams[homeTeamName.ToLower()] = homeTeam;
                 }
+                if (homeTeam.ApiTeamId == null) homeTeam.ApiTeamId = apiHomeTeamId; // bkz. TeamSeasonStat/FixturePrediction
 
-                // Deplasman Takımı — normalize key ile ara
+                // Deplasman Takımı — normalize key ile ara (aynı desen)
                 if (!existingTeams.TryGetValue(awayTeamName.ToLower(), out var awayTeam))
                 {
-                    awayTeam = new Team { Name = awayTeamName };
-                    _context.Teams.Add(awayTeam);
-                    await _context.SaveChangesAsync();
+                    awayTeam = TeamNameNormalizer.FindSafeFuzzyMatch(awayTeamName, existingTeams.Values);
+                    if (awayTeam == null)
+                    {
+                        awayTeam = new Team { Name = awayTeamName };
+                        _context.Teams.Add(awayTeam);
+                        await _context.SaveChangesAsync();
+                    }
                     existingTeams[awayTeamName.ToLower()] = awayTeam;
                 }
+                if (awayTeam.ApiTeamId == null) awayTeam.ApiTeamId = apiAwayTeamId;
 
-                DateTime rawDate = fixture.GetProperty("date").GetDateTime();
-                DateTime matchDateUtc = DateTime.SpecifyKind(rawDate, DateTimeKind.Utc);
+                // ÖNEMLİ: api-sports tarihi genelde sıfır olmayan bir offset ile döner (örn. "+01:00" İngiltere
+                // yaz saati). System.Text.Json bu durumda GetDateTime()'ı SUNUCUNUN yerel saatine çevirip
+                // Kind=Local işaretler (offset "+00:00"/"Z" ise Kind=Utc kalır, değer değişmez). Önceden burada
+                // doğrudan SpecifyKind(...,Utc) ile "yerel saat" değeri UTC diye etiketleniyordu — bu da
+                // MatchDate'in gerçek UTC'den sunucunun UTC farkı kadar (örn. +3 saat, TR sunucusunda) kaymasına
+                // yol açıyordu. Sonuç: senkronize edilen maçların tarihi/haftası, FixtureSchedule'daki
+                // (doğru hesaplanan) KickoffUtc ile tutarsız kalıyor, Gol Beklentisi'nin hafta penceresi maçı
+                // "oynanmış" olarak eşleştiremiyordu. ToUniversalTime() ile önce gerçek UTC'ye çevrilir, SONRA
+                // Kind=Utc etiketlenir — FixtureScheduleService.SyncScheduleAsync'teki desenle birebir aynı.
+                DateTime matchDateUtc = DateTime.SpecifyKind(
+                    fixture.GetProperty("date").GetDateTime().ToUniversalTime(), DateTimeKind.Utc);
 
                 bool exists = await _context.Matches.AnyAsync(m =>
                     m.HomeTeamId == homeTeam.Id &&

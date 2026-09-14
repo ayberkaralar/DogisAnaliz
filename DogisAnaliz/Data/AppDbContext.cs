@@ -15,6 +15,9 @@ public class AppDbContext : DbContext
     public DbSet<MatchDetail> MatchDetails => Set<MatchDetail>();
     public DbSet<DogiPattern> DogiPatterns => Set<DogiPattern>();
     public DbSet<FixtureSchedule> FixtureSchedules => Set<FixtureSchedule>();
+    public DbSet<Standing> Standings => Set<Standing>();
+    public DbSet<TeamSeasonStat> TeamSeasonStats => Set<TeamSeasonStat>();
+    public DbSet<FixturePrediction> FixturePredictions => Set<FixturePrediction>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -136,6 +139,37 @@ public class AppDbContext : DbContext
                 .WithMany()
                 .HasForeignKey(f => f.AwayTeamId)
                 .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        // Standing — lig tablosu (an itibarıyla tek satır/takım, upsert)
+        modelBuilder.Entity<Standing>(e =>
+        {
+            e.HasIndex(s => new { s.LeagueId, s.SeasonId, s.TeamId }).IsUnique();
+
+            e.HasOne(s => s.League).WithMany().HasForeignKey(s => s.LeagueId).OnDelete(DeleteBehavior.Restrict);
+            e.HasOne(s => s.Season).WithMany().HasForeignKey(s => s.SeasonId).OnDelete(DeleteBehavior.Restrict);
+            e.HasOne(s => s.Team).WithMany().HasForeignKey(s => s.TeamId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        // TeamSeasonStat — takım+lig+sezon özet istatistikleri (upsert)
+        modelBuilder.Entity<TeamSeasonStat>(e =>
+        {
+            e.HasIndex(s => new { s.LeagueId, s.SeasonId, s.TeamId }).IsUnique();
+
+            e.HasOne(s => s.League).WithMany().HasForeignKey(s => s.LeagueId).OnDelete(DeleteBehavior.Restrict);
+            e.HasOne(s => s.Season).WithMany().HasForeignKey(s => s.SeasonId).OnDelete(DeleteBehavior.Restrict);
+            e.HasOne(s => s.Team).WithMany().HasForeignKey(s => s.TeamId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        // FixturePrediction — maç başına api-sports tahmini (ApiFixtureId ile upsert)
+        modelBuilder.Entity<FixturePrediction>(e =>
+        {
+            e.HasIndex(p => p.ApiFixtureId).IsUnique();
+
+            e.HasOne(p => p.League).WithMany().HasForeignKey(p => p.LeagueId).OnDelete(DeleteBehavior.Restrict);
+            e.HasOne(p => p.Season).WithMany().HasForeignKey(p => p.SeasonId).OnDelete(DeleteBehavior.Restrict);
+            e.HasOne(p => p.HomeTeam).WithMany().HasForeignKey(p => p.HomeTeamId).OnDelete(DeleteBehavior.Restrict);
+            e.HasOne(p => p.AwayTeam).WithMany().HasForeignKey(p => p.AwayTeamId).OnDelete(DeleteBehavior.Restrict);
         });
     }
 }

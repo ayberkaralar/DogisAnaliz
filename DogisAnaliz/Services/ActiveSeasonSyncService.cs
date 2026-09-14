@@ -25,15 +25,16 @@ public class ActiveSeasonSyncService : BackgroundService
             await Task.Delay(TimeSpan.FromSeconds(8), stoppingToken);
 
             using var scope = _sp.CreateScope();
-            var ctx  = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-            var api  = scope.ServiceProvider.GetRequiredService<FootballApiService>();
-            var dogi = scope.ServiceProvider.GetRequiredService<DogiService>();
+            var ctx       = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            var api       = scope.ServiceProvider.GetRequiredService<FootballApiService>();
+            var dogi      = scope.ServiceProvider.GetRequiredService<DogiService>();
+            var standings = scope.ServiceProvider.GetRequiredService<StandingsService>();
 
             _logger.LogInformation("[Otomatik Güncelle] Aktif sezon ({Season}-{Next}) güncelleniyor...",
                 LeagueCatalog.ActiveSeasonYear, LeagueCatalog.ActiveSeasonYear + 1);
 
             var r = await ActiveSeasonRefresher.RefreshAsync(
-                ctx, api, dogi,
+                ctx, api, dogi, standings,
                 log: msg => _logger.LogInformation("[Otomatik Güncelle] {Msg}", msg),
                 ct: stoppingToken);
 

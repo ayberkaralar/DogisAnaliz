@@ -87,6 +87,8 @@ public class FixtureScheduleService
                     teamsEl.GetProperty("home").GetProperty("name").GetString()!);
                 string awayName = TeamNameNormalizer.Normalize(
                     teamsEl.GetProperty("away").GetProperty("name").GetString()!);
+                int apiHomeTeamId = teamsEl.GetProperty("home").GetProperty("id").GetInt32();
+                int apiAwayTeamId = teamsEl.GetProperty("away").GetProperty("id").GetInt32();
 
                 var ghEl = goalsEl.GetProperty("home");
                 var gaEl = goalsEl.GetProperty("away");
@@ -108,20 +110,33 @@ public class FixtureScheduleService
                     await _context.SaveChangesAsync();
                     existingSeasons[seasonName] = season;
                 }
+                // Tam eşleşme yoksa güvenli kısa/uzun ad eşleşmesine bak (bkz.
+                // TeamNameNormalizer.FindSafeFuzzyMatch) — yoksa api-sports farklı bir ad
+                // döndürdüğünde her senkronizasyonda aynı duplicate takım geri gelir.
                 if (!existingTeams.TryGetValue(homeName.ToLower(), out var homeTeam))
                 {
-                    homeTeam = new Team { Name = homeName };
-                    _context.Teams.Add(homeTeam);
-                    await _context.SaveChangesAsync();
+                    homeTeam = TeamNameNormalizer.FindSafeFuzzyMatch(homeName, existingTeams.Values);
+                    if (homeTeam == null)
+                    {
+                        homeTeam = new Team { Name = homeName };
+                        _context.Teams.Add(homeTeam);
+                        await _context.SaveChangesAsync();
+                    }
                     existingTeams[homeName.ToLower()] = homeTeam;
                 }
+                if (homeTeam.ApiTeamId == null) homeTeam.ApiTeamId = apiHomeTeamId;
                 if (!existingTeams.TryGetValue(awayName.ToLower(), out var awayTeam))
                 {
-                    awayTeam = new Team { Name = awayName };
-                    _context.Teams.Add(awayTeam);
-                    await _context.SaveChangesAsync();
+                    awayTeam = TeamNameNormalizer.FindSafeFuzzyMatch(awayName, existingTeams.Values);
+                    if (awayTeam == null)
+                    {
+                        awayTeam = new Team { Name = awayName };
+                        _context.Teams.Add(awayTeam);
+                        await _context.SaveChangesAsync();
+                    }
                     existingTeams[awayName.ToLower()] = awayTeam;
                 }
+                if (awayTeam.ApiTeamId == null) awayTeam.ApiTeamId = apiAwayTeamId;
 
                 total++;
 

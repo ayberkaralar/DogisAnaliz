@@ -11,6 +11,10 @@ public static class LeagueCatalog
     /// <summary>Aktif (içinde bulunulan) sezonun başlangıç yılı. 2026 → "2026-2027".</summary>
     public const int ActiveSeasonYear = 2026;
 
+    /// <summary>Aktif sezonun tam adı — <see cref="Models.Season.SeasonName"/> ile birebir eşleşir.
+    /// Tüm ekranların "varsayılan sezon" seçiminde önce bunu aramalı (bkz. CLAUDE.md "Aktif sezon").</summary>
+    public static string ActiveSeasonName => $"{ActiveSeasonYear}-{ActiveSeasonYear + 1}";
+
     public static readonly LeagueConfig[] KnownLeagues =
     {
         // ── Birinci Ligler ──

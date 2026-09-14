@@ -10,8 +10,10 @@ builder.Services.AddDbContext<AppDbContext>(options =>
 builder.Services.AddHttpClient<FootballApiService>();
 builder.Services.AddHttpClient<OpenFootballService>();
 builder.Services.AddHttpClient<FixtureScheduleService>();
+builder.Services.AddHttpClient<StandingsService>();
+builder.Services.AddHttpClient<TeamStatisticsService>();
+builder.Services.AddHttpClient<PredictionService>();
 builder.Services.AddScoped<DogiService>();
-builder.Services.AddScoped<ExcelImportService>();
 builder.Services.AddControllersWithViews();
 
 // Açılışta arka planda aktif sezonu güncelle (sunucuyu bloklamaz)

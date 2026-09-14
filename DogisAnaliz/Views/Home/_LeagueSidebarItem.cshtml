@@ -1,0 +1,42 @@
+@* Sol menüde tek bir lig satırı. Seçili lig ise (Vm.SelectedLeagueId) kendi altına, doğrudan
+   nested olarak, o ligin takım listesini açar — ayrı bir "Takımlar" bloğu YOK, her lig kendi
+   takımlarını kendi altında gösterir (bkz. CLAUDE.md "Ana Sayfa sol menü"). *@
+@model (DogisAnaliz.Models.LeagueNavDto League, DogisAnaliz.Models.DashboardViewModel Vm)
+@{
+    var league = Model.League;
+    var vm = Model.Vm;
+    var view = vm.ViewMode;
+    var isSelected = league.Id == vm.SelectedLeagueId;
+}
+
+@if (isSelected)
+{
+    <details class="sidebar-group" open>
+        <summary style="display:flex; align-items:center;">
+            <span class="league-summary-row">
+                <span>@DogisAnaliz.Services.LeagueDisplayHelper.ToDisplay(league.Name, league.Country)</span>
+                <span class="badge rounded-pill">@league.SurpriseCount</span>
+            </span>
+        </summary>
+        <div class="nav flex-column team-list ps-2">
+            <a asp-action="Index" asp-route-leagueId="@vm.SelectedLeagueId" asp-route-seasonId="@vm.SelectedSeasonId" asp-route-sort="@vm.SortOrder" asp-route-view="@view" class="nav-team-item @(!vm.SelectedTeamId.HasValue ? "active" : "")">
+                <span>— Tüm Takımlar —</span>
+            </a>
+            @foreach (var team in vm.Teams)
+            {
+                var isActiveTeam = team.Id == vm.SelectedTeamId ? "active" : "";
+                <a asp-action="Index" asp-route-leagueId="@vm.SelectedLeagueId" asp-route-seasonId="@vm.SelectedSeasonId" asp-route-teamId="@team.Id" asp-route-sort="@vm.SortOrder" asp-route-view="@view" class="nav-team-item @isActiveTeam" title="Fikstür ve sürpriz bilgisini görmek için tıkla">
+                    <span>@team.Name</span>
+                    <span class="text-secondary small">@team.MatchCount</span>
+                </a>
+            }
+        </div>
+    </details>
+}
+else
+{
+    <a asp-action="Index" asp-route-leagueId="@league.Id" asp-route-sort="@vm.SortOrder" asp-route-view="@view" class="nav-league-item">
+        <span>@DogisAnaliz.Services.LeagueDisplayHelper.ToDisplay(league.Name, league.Country)</span>
+        <span class="badge bg-dark border border-secondary rounded-pill">@league.SurpriseCount</span>
+    </a>
+}

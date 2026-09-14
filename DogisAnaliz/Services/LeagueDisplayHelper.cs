@@ -92,4 +92,43 @@ public static class LeagueDisplayHelper
     {
         return $"{GetFlag(leagueName, country)} {ToTurkish(leagueName, country)}";
     }
+
+    // ── Sol menü sıralaması ────────────────────────────────────────────────
+    // Tier 0: Büyük 5 (sabit sırayla) → Tier 1: diğer 1. ligler (alfabetik) →
+    // Tier 2: 2. ligler / alt ligler (alfabetik, en altta).
+    // Name+Country combo ile eşleşir (aynı isimli iki lig — örn. Bundesliga
+    // Almanya/Avusturya — country ile ayrılır).
+    private static readonly string[] _big5Order =
+    {
+        "England_Premier League",
+        "Germany_Bundesliga",
+        "Almanya_Bundesliga",   // DB'de bazı eski kayıtlarda country Türkçe "Almanya" olabilir
+        "France_Ligue 1",
+        "Spain_La Liga",
+        "Italy_Serie A",
+    };
+
+    private static readonly HashSet<string> _secondTierNames = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "2. Bundesliga", "La Liga 2", "Segunda División", "Eerste Divisie"
+    };
+
+    /// <summary>
+    /// Sol menüdeki lig sıralaması için (tier, sıraNo) döner — küçük olan önce gelir.
+    /// tier 0 = Büyük 5 (belirtilen sabit sırada), 1 = diğer 1. ligler, 2 = 2. ligler.
+    /// sıraNo: tier 0 için sabit sıra index'i, tier 1/2 için 0 (view'da Türkçe ada göre
+    /// alfabetik sıralanır — burada sadece grup belirlenir).
+    /// </summary>
+    public static (int Tier, int Order) GetSidebarRank(string? leagueName, string? country)
+    {
+        if (string.IsNullOrWhiteSpace(leagueName)) return (1, 0);
+
+        string key = $"{country}_{leagueName}";
+        int big5Index = Array.IndexOf(_big5Order, key);
+        if (big5Index >= 0) return (0, big5Index);
+
+        if (_secondTierNames.Contains(leagueName)) return (2, 0);
+
+        return (1, 0);
+    }
 }

@@ -1,0 +1,105 @@
+@* Puan Durumu sekmesi — Standing tablosundan (api-sports "standings", "Senkronize Et" ile
+   tazelenir), Model.SelectedLeagueId + Model.SelectedSeasonId için. *@
+@model DogisAnaliz.Models.DashboardViewModel
+@{
+    string RowAccent(string? desc)
+    {
+        if (string.IsNullOrEmpty(desc)) return "";
+        var d = desc.ToLowerInvariant();
+        if (d.Contains("champions league")) return "#22c55e";
+        if (d.Contains("europa") || d.Contains("conference")) return "#0ea5e9";
+        if (d.Contains("relegation") || d.Contains("düşme")) return "#ef4444";
+        return "";
+    }
+}
+
+<div class="d-flex flex-wrap justify-content-between align-items-center mb-3 bg-dark p-3 rounded-3 border border-secondary border-opacity-25 shadow-sm">
+    <div>
+        <h3 class="fw-bold text-white mb-0">@LeagueDisplayHelper.ToTurkish(Model.SelectedLeagueName) Puan Durumu</h3>
+        <small class="text-secondary">
+            @(Model.SelectedSeasonId.HasValue ? Model.Seasons.FirstOrDefault(s => s.Id == Model.SelectedSeasonId)?.SeasonName : "")
+            @if (Model.StandingsUpdatedAt.HasValue)
+            {
+                <span> · son güncelleme: @Model.StandingsUpdatedAt.Value.AddHours(3).ToString("dd.MM.yyyy HH:mm")</span>
+            }
+        </small>
+    </div>
+    <div class="d-flex align-items-center gap-2 mt-2 mt-sm-0 flex-wrap">
+        <label class="text-light fw-semibold small">Sezon:</label>
+        <select class="season-select" onchange="location = this.value;">
+            @foreach (var season in Model.Seasons)
+            {
+                var isSelected = season.Id == Model.SelectedSeasonId ? "selected" : "";
+                <!option value="@Url.Action("Index", new { leagueId = Model.SelectedLeagueId, seasonId = season.Id, view = "standings" })" @isSelected>
+                    @season.SeasonName
+                </!option>
+            }
+        </select>
+    </div>
+</div>
+
+@if (!Model.Standings.Any())
+{
+    <div class="table-container shadow-sm text-center py-5 text-secondary fw-semibold">
+        Bu lig/sezon için puan durumu henüz senkronize edilmemiş.<br />
+        <span class="small">Ana Sayfa'daki "🔄 Senkronize Et" butonuna basınca (aktif sezon için) otomatik çekilir.</span>
+    </div>
+}
+else
+{
+    <div class="table-container shadow-sm">
+        <div class="table-responsive">
+            <table class="table-dark-custom" style="border-spacing:0 4px;">
+                <thead>
+                    <tr>
+                        <th style="width:40px;">#</th>
+                        <th class="col-mac">Takım</th>
+                        <th class="col-hafta">O</th>
+                        <th class="col-hafta">G</th>
+                        <th class="col-hafta">B</th>
+                        <th class="col-hafta">M</th>
+                        <th class="col-hafta">AG</th>
+                        <th class="col-hafta">YG</th>
+                        <th class="col-hafta">AV</th>
+                        <th class="col-hafta">P</th>
+                        <th style="min-width:120px;">Form</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var s in Model.Standings)
+                    {
+                        var accent = RowAccent(s.Description);
+                        var isSelectedTeam = s.TeamId == Model.SelectedTeamId;
+                        <tr title="@s.Description"
+                            style="@(accent != "" ? $"box-shadow: inset 3px 0 0 {accent};" : "") @(isSelectedTeam ? "outline:1px solid #3b82f6;" : "")">
+                            <td class="fw-bold text-light">@s.Rank</td>
+                            <td class="fw-bold @(isSelectedTeam ? "text-info" : "text-white")">@s.TeamName</td>
+                            <td class="font-monospace text-light">@s.Played</td>
+                            <td class="font-monospace" style="color:#4ade80">@s.Win</td>
+                            <td class="font-monospace text-secondary">@s.Draw</td>
+                            <td class="font-monospace" style="color:#f87171">@s.Lose</td>
+                            <td class="font-monospace text-light">@s.GoalsFor</td>
+                            <td class="font-monospace text-light">@s.GoalsAgainst</td>
+                            <td class="font-monospace fw-bold" style="color:@(s.GoalsDiff > 0 ? "#4ade80" : s.GoalsDiff < 0 ? "#f87171" : "#94a3b8")">@(s.GoalsDiff > 0 ? "+" : "")@s.GoalsDiff</td>
+                            <td class="font-monospace fw-bold fs-6 text-white">@s.Points</td>
+                            <td style="letter-spacing:2px; font-size:0.85rem;">
+                                @foreach (var c in s.Form)
+                                {
+                                    var color = c == 'W' ? "#4ade80" : c == 'D' ? "#94a3b8" : c == 'L' ? "#f87171" : "#475569";
+                                    <span style="color:@color; font-weight:800;">@c</span>
+                                }
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+    <div class="mt-2 text-secondary" style="font-size:0.78rem;">
+        O: Oynanan · G: Galibiyet · B: Beraberlik · M: Mağlubiyet · AG: Attığı Gol · YG: Yediği Gol · AV: Averaj · P: Puan
+        @if (Model.Standings.Any(s => !string.IsNullOrEmpty(s.Description)))
+        {
+            <span> · sol renkli çizgi: <span style="color:#22c55e;">■</span> Şampiyonlar Ligi <span style="color:#0ea5e9;">■</span> Avrupa kupaları <span style="color:#ef4444;">■</span> Küme düşme hattı</span>
+        }
+    </div>
+}

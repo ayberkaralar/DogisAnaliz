@@ -124,18 +124,28 @@ public class OpenFootballService
                 string team1Name = TeamNameNormalizer.Normalize(m.Team1);
                 string team2Name = TeamNameNormalizer.Normalize(m.Team2);
 
+                // Tam eşleşme yoksa güvenli kısa/uzun ad eşleşmesine bak (bkz.
+                // TeamNameNormalizer.FindSafeFuzzyMatch) — bkz. FootballApiService'teki aynı desen.
                 if (!existingTeams.TryGetValue(team1Name.ToLower(), out var homeTeam))
                 {
-                    homeTeam = new Team { Name = team1Name };
-                    _context.Teams.Add(homeTeam);
-                    await _context.SaveChangesAsync();
+                    homeTeam = TeamNameNormalizer.FindSafeFuzzyMatch(team1Name, existingTeams.Values);
+                    if (homeTeam == null)
+                    {
+                        homeTeam = new Team { Name = team1Name };
+                        _context.Teams.Add(homeTeam);
+                        await _context.SaveChangesAsync();
+                    }
                     existingTeams[team1Name.ToLower()] = homeTeam;
                 }
                 if (!existingTeams.TryGetValue(team2Name.ToLower(), out var awayTeam))
                 {
-                    awayTeam = new Team { Name = team2Name };
-                    _context.Teams.Add(awayTeam);
-                    await _context.SaveChangesAsync();
+                    awayTeam = TeamNameNormalizer.FindSafeFuzzyMatch(team2Name, existingTeams.Values);
+                    if (awayTeam == null)
+                    {
+                        awayTeam = new Team { Name = team2Name };
+                        _context.Teams.Add(awayTeam);
+                        await _context.SaveChangesAsync();
+                    }
                     existingTeams[team2Name.ToLower()] = awayTeam;
                 }
 

@@ -11,7 +11,7 @@ public class DashboardViewModel
     public int? SelectedTeamId   { get; set; }
     public string SelectedLeagueName { get; set; } = string.Empty;
 
-    // Görünüm modu: "surprise" (varsayılan, mevcut sürpriz ekranı) | "fixtures" (tüm maçlar / fikstür)
+    // Görünüm modu: "surprise" (varsayılan) | "fixtures" (tüm maçlar) | "standings" (puan durumu)
     public string ViewMode { get; set; } = "surprise";
 
     // surprise modu: ALL, TURNAROUND, HIGH_GOAL, DOUBLE
@@ -36,6 +36,47 @@ public class DashboardViewModel
 
     // fixtures modunda bir takım seçiliyse: o takımın seçili sezondaki özeti
     public TeamFixtureStatsDto? TeamStats { get; set; }
+
+    // fixtures modunda, sezonun henüz oynanmamış (FixtureSchedule kaynaklı) kaç maçı tabloya
+    // eklendi — KPI kartında ve "🔮 Kalan Fikstür" hızlı filtresinde gösterilir.
+    public int UpcomingCount { get; set; }
+
+    // standings modunda: seçili lig+sezonun güncel puan durumu (Standing tablosundan, Rank'a göre sıralı)
+    public List<StandingRowDto> Standings { get; set; } = new();
+    public DateTime? StandingsUpdatedAt { get; set; }
+}
+
+// standings modunda tek satır — Standing entity'sinden birebir
+public class StandingRowDto
+{
+    public int TeamId { get; set; }
+    public string TeamName { get; set; } = string.Empty;
+    public int Rank { get; set; }
+    public int Points { get; set; }
+    public int GoalsDiff { get; set; }
+    public string Form { get; set; } = string.Empty;
+    public string? Description { get; set; }
+
+    public int Played { get; set; }
+    public int Win { get; set; }
+    public int Draw { get; set; }
+    public int Lose { get; set; }
+    public int GoalsFor { get; set; }
+    public int GoalsAgainst { get; set; }
+
+    public int HomePlayed { get; set; }
+    public int HomeWin { get; set; }
+    public int HomeDraw { get; set; }
+    public int HomeLose { get; set; }
+    public int HomeGoalsFor { get; set; }
+    public int HomeGoalsAgainst { get; set; }
+
+    public int AwayPlayed { get; set; }
+    public int AwayWin { get; set; }
+    public int AwayDraw { get; set; }
+    public int AwayLose { get; set; }
+    public int AwayGoalsFor { get; set; }
+    public int AwayGoalsAgainst { get; set; }
 }
 
 public class LeagueNavDto
@@ -44,14 +85,16 @@ public class LeagueNavDto
     public string Name          { get; set; } = string.Empty;
     public string Country       { get; set; } = string.Empty;
     public int    SurpriseCount { get; set; }
+    // Sol menü grubu: 0 = Büyük 5, 1 = diğer 1. ligler, 2 = 2. ligler — bkz. LeagueDisplayHelper.GetSidebarRank
+    public int    Tier          { get; set; }
 }
 
 public class TeamNavDto
 {
     public int    Id            { get; set; }
     public string Name          { get; set; } = string.Empty;
-    public int    SurpriseCount { get; set; } // Seçili sezondaki sürpriz sayısı
-    public int    MatchCount    { get; set; } // fixtures modunda seçili sezonda oynanan maç sayısı
+    public int    SurpriseCount { get; set; } // Seçili lig+sezondaki sürpriz sayısı
+    public int    MatchCount    { get; set; } // Seçili lig+sezonda oynanan toplam maç sayısı
 }
 
 public class MatchRowDto
@@ -71,6 +114,9 @@ public class MatchRowDto
     public string   SurpriseType { get; set; } = "NONE";
     // Takım filtresi aktifken hangi takım (ev sahibi/deplasman) olduğunu vurgular
     public bool     IsHomeTeam   { get; set; }
+    // false ise: bu satır Match'ten değil FixtureSchedule'dan geliyor — maç henüz oynanmadı,
+    // Ht/FtScore/IyMsCode/MsResultCode anlamsız ("-"), sadece hafta+tarih+rakip bilgisi geçerli.
+    public bool     IsPlayed     { get; set; } = true;
 }
 
 // fixtures modunda seçili takımın seçili sezondaki fikstür özeti (bellek içinde hesaplanır)
@@ -102,4 +148,9 @@ public class TeamFixtureStatsDto
     public int HighGoalCount   { get; set; } // toplam gol >= 6
     public int TurnaroundCount { get; set; } // MatchSurprise.IsTurnaround
     public int SurpriseCount   { get; set; } // SurpriseType != "NONE"
+
+    // Standing'den (api-sports) — doluysa gösterilir, yoksa null (henüz senkronize edilmemiş)
+    public int? LeagueRank { get; set; }
+    public int? LeaguePoints { get; set; }
+    public string? LeagueForm { get; set; } // "WWDLL"
 }

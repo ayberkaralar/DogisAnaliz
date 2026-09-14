@@ -1,5 +1,6 @@
 using DogisAnaliz.Data;
 using DogisAnaliz.Models;
+using DogisAnaliz.Services;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
@@ -34,9 +35,9 @@ public class GolBeklentisiController : Controller
         return w * (2.0 * h2hAvg) + (1 - w) * teamPart;
     }
 
-    public async Task<IActionResult> Index(int? leagueId, int? seasonId, DateTime? date)
+    public async Task<IActionResult> Index(int? leagueId, int? seasonId, DateTime? date, int? teamId)
     {
-        var vm = new GolBeklentisiViewModel { SelectedSeasonId = seasonId, SelectedDate = date?.Date };
+        var vm = new GolBeklentisiViewModel { SelectedSeasonId = seasonId, SelectedDate = date?.Date, SelectedTeamId = teamId };
 
         var leagueCounts = await _context.Matches.AsNoTracking()
             .GroupBy(m => m.LeagueId).Select(g => new { LeagueId = g.Key, Count = g.Count() }).ToListAsync();
@@ -64,7 +65,8 @@ public class GolBeklentisiController : Controller
         vm.Seasons = await _context.Seasons.AsNoTracking()
             .Where(s => allSeasonIdsForDropdown.Contains(s.Id)).OrderByDescending(s => s.StartYear).ToListAsync();
         if (!seasonId.HasValue)
-            seasonId = (schedSeasons.Count > 0 ? vm.Seasons.FirstOrDefault(s => schedSeasons.Contains(s.Id)) : vm.Seasons.FirstOrDefault())?.Id;
+            seasonId = vm.Seasons.FirstOrDefault(s => s.SeasonName == LeagueCatalog.ActiveSeasonName)?.Id
+                ?? (schedSeasons.Count > 0 ? vm.Seasons.FirstOrDefault(s => schedSeasons.Contains(s.Id)) : vm.Seasons.FirstOrDefault())?.Id;
         vm.SelectedSeasonId = seasonId;
         vm.SelectedSeasonName = vm.Seasons.FirstOrDefault(s => s.Id == seasonId)?.SeasonName ?? "-";
 
@@ -135,9 +137,13 @@ public class GolBeklentisiController : Controller
         vm.WindowFrom = windowFrom;
         vm.WindowTo = windowTo;
 
-        // Pencereye giren OYNANMIŞ maçların anahtarları — yürüyen taramada "o anki" (maç öncesi) tahmini yakalamak için
+        // Pencereye giren OYNANMIŞ maçların anahtarları — yürüyen taramada "o anki" (maç öncesi)
+        // tahmini yakalamak için. Takım filtresi seçiliyse pencere artık 2 hafta değil o takımın
+        // TÜM sezonu olduğundan, "o anki" tahmin de takımın oynadığı HER hafta için yakalanmalı.
         var windowPlayedKeys = seasonId.HasValue
-            ? seasonFx.Where(f => f.Played && windowWeeks.Contains(f.Week))
+            ? seasonFx.Where(f => f.Played && (teamId.HasValue
+                    ? (f.HomeId == teamId.Value || f.AwayId == teamId.Value)
+                    : windowWeeks.Contains(f.Week)))
                 .Select(f => (f.Week, Math.Min(f.HomeId, f.AwayId), Math.Max(f.HomeId, f.AwayId)))
                 .ToHashSet()
             : new HashSet<(int, int, int)>();
@@ -239,19 +245,57 @@ public class GolBeklentisiController : Controller
             return new GbTeamDto { Id = id, Name = names[id], CareerAvg = Math.Round(car, 2),
                 RecentAvg = Math.Round(rec, 2), Blended = Math.Round(bl, 2), Played = pl, LowData = low };
         }).OrderByDescending(t => t.Blended).ToList();
+        if (teamId.HasValue)
+            vm.SelectedTeamName = names.GetValueOrDefault(teamId.Value, "-");
+
+        // TeamSeasonStat (api-sports "teams/statistics") — senkronize edildiyse ev/deplasman
+        // ayrı ortalamayı takım tablosuna ekle (bizim Blended hesabımıza EK/karşılaştırma).
+        if (seasonId.HasValue)
+        {
+            var apiStats = await _context.TeamSeasonStats.AsNoTracking()
+                .Where(s => s.LeagueId == leagueId.Value && s.SeasonId == seasonId.Value)
+                .ToDictionaryAsync(s => s.TeamId);
+            foreach (var t in vm.Teams)
+            {
+                if (apiStats.TryGetValue(t.Id, out var st))
+                {
+                    t.ApiGoalsForAvgHome = st.GoalsForAvgHome;
+                    t.ApiGoalsForAvgAway = st.GoalsForAvgAway;
+                }
+            }
+        }
         var blendedById = vm.Teams.ToDictionary(t => t.Id, t => t.Blended);
         var lowById = vm.Teams.ToDictionary(t => t.Id, t => t.LowData);
 
+        // api-sports'un KENDİ tahmini (Sync ekranındaki "🔮 Tahminler" ile, sadece yakın vadeli
+        // maçlar için çekilir) — varsa (HomeTeamId,AwayTeamId) ile eşleştirip karşılaştırma
+        // amacıyla ekleriz; bizim Combined/Bucket hesabımızı DEĞİŞTİRMEZ.
+        var apiPredictions = seasonId.HasValue
+            ? (await _context.FixturePredictions.AsNoTracking()
+                .Where(p => p.LeagueId == leagueId.Value && p.SeasonId == seasonId.Value)
+                .ToListAsync())
+                .ToDictionary(p => (p.HomeTeamId, p.AwayTeamId))
+            : new Dictionary<(int, int), FixturePrediction>();
+
         // --- Pencere: oynanmış + oynanmamış maçlar birlikte ---
-        if (seasonId.HasValue && windowWeeks.Count > 0)
+        // Takım filtresi YOKSA: global 2 haftalık pencere (bugünün haftası + sonraki).
+        // Takım filtresi VARSA: o takımın SEZON BOYUNCA tüm maçları (geçmiş + kalan) — "maçlar
+        // güncellenmiyor" şikayetinin sebebi buydu: 2 haftalık pencere kullanıcının takip ettiği
+        // takımın maçını çoğu zaman kapsamıyordu. Artık takım seçilince tüm sezonu gösteriyoruz.
+        if (seasonId.HasValue && (teamId.HasValue || windowWeeks.Count > 0))
         {
             // GroupBy + First (ToDictionary değil): takım birleştirmesinden sonra aynı hafta/ikili için
             // birden fazla (kopya) Match satırı kalmış olabilir — bu durumda çökmek yerine ilkini kullan.
+
             var msSeasonByKey = ms.Where(x => x.SeasonId == seasonId.Value)
                 .GroupBy(x => (x.Week, Math.Min(x.HomeTeamId, x.AwayTeamId), Math.Max(x.HomeTeamId, x.AwayTeamId)))
                 .ToDictionary(g => g.Key, g => g.First());
 
-            foreach (var f in seasonFx.Where(f => windowWeeks.Contains(f.Week)))
+            var fixturesToShow = teamId.HasValue
+                ? seasonFx.Where(f => f.HomeId == teamId.Value || f.AwayId == teamId.Value)
+                : seasonFx.Where(f => windowWeeks.Contains(f.Week));
+
+            foreach (var f in fixturesToShow)
             {
                 var key = (f.Week, Math.Min(f.HomeId, f.AwayId), Math.Max(f.HomeId, f.AwayId));
                 if (f.Played)
@@ -285,6 +329,7 @@ public class GolBeklentisiController : Controller
                     double comb = Combine(teamPart, h2hAvg, ph.n);
                     var bl = Bucket(comb);
                     var bk = bucketByLabel.GetValueOrDefault(bl);
+                    apiPredictions.TryGetValue((f.HomeId, f.AwayId), out var apiPred);
                     vm.WindowFixtures.Add(new GbFixtureDto
                     {
                         Week = f.Week, KickoffUtc = f.Date,
@@ -295,7 +340,9 @@ public class GolBeklentisiController : Controller
                         H2hCount = ph.n, H2hAvg = ph.n > 0 ? Math.Round(h2hAvg, 2) : 0,
                         Combined = Math.Round(comb, 2), BucketLabel = bl,
                         Plus6Rate = bk?.Plus6Rate ?? 0, Plus5Rate = bk?.Plus5Rate ?? 0,
-                        LowData = lowById.GetValueOrDefault(f.HomeId) || lowById.GetValueOrDefault(f.AwayId)
+                        LowData = lowById.GetValueOrDefault(f.HomeId) || lowById.GetValueOrDefault(f.AwayId),
+                        ApiPercentHome = apiPred?.PercentHome, ApiPercentDraw = apiPred?.PercentDraw,
+                        ApiPercentAway = apiPred?.PercentAway, ApiAdvice = apiPred?.Advice
                     });
                 }
             }

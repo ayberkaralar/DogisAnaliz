@@ -86,12 +86,24 @@
                     }
                 </select>
             </span>
-            <span><label>Tarih</label>&nbsp;
-                <input type="date" name="date" value="@(Model.SelectedDate?.ToString("yyyy-MM-dd"))" onchange="this.form.submit()" />
+            <span><label>Takım</label>&nbsp;
+                <select name="teamId" onchange="this.form.submit()">
+                    <option value="">— Tüm Takımlar —</option>
+                    @foreach (var t in Model.Teams.OrderBy(t => t.Name))
+                    {
+                        <option value="@t.Id" selected="@(t.Id == Model.SelectedTeamId)">@t.Name</option>
+                    }
+                </select>
             </span>
-            @if (Model.SelectedDate.HasValue)
+            @if (!Model.IsTeamFiltered)
             {
-                <a class="reset" href="@Url.Action("Index", new { leagueId = Model.SelectedLeagueId, seasonId = Model.SelectedSeasonId })">bugüne dön</a>
+                <span><label>Tarih</label>&nbsp;
+                    <input type="date" name="date" value="@(Model.SelectedDate?.ToString("yyyy-MM-dd"))" onchange="this.form.submit()" />
+                </span>
+            }
+            @if (Model.SelectedDate.HasValue || Model.IsTeamFiltered)
+            {
+                <a class="reset" href="@Url.Action("Index", new { leagueId = Model.SelectedLeagueId, seasonId = Model.SelectedSeasonId })">sıfırla (bugün / tüm takımlar)</a>
             }
         </form>
 
@@ -125,16 +137,30 @@
         </table>
 
         <div class="sec-hd">
-            🎯 @Model.WindowWeekStart. ve @Model.WindowWeekEnd. hafta
-            @if (Model.WindowFrom.HasValue && Model.WindowTo.HasValue)
+            @if (Model.IsTeamFiltered)
             {
-                <span style="color:#8ca0b8; font-weight:600; font-size:.85rem;">
-                    (@Model.WindowFrom.Value.ToString("dd.MM.yyyy") – @Model.WindowTo.Value.ToString("dd.MM.yyyy"))
-                </span>
+                <text>🔎 @Model.SelectedTeamName — sezonun TÜM maçları (@Model.WindowFixtures.Count)</text>
+            }
+            else
+            {
+                <text>🎯 @Model.WindowWeekStart. ve @Model.WindowWeekEnd. hafta</text>
+                @if (Model.WindowFrom.HasValue && Model.WindowTo.HasValue)
+                {
+                    <span style="color:#8ca0b8; font-weight:600; font-size:.85rem;">
+                        (@Model.WindowFrom.Value.ToString("dd.MM.yyyy") – @Model.WindowTo.Value.ToString("dd.MM.yyyy"))
+                    </span>
+                }
             }
         </div>
         <p style="color:#8ca0b8; font-size:.8rem; margin:2px 0 8px;">
-            <b>Tarih</b> kutusuna bir gün seçersen, o günün içinde olduğu hafta + bir sonraki hafta gösterilir (varsayılan: bugün).
+            @if (Model.IsTeamFiltered)
+            {
+                <text><b>Takım</b> seçtiğin için burada sadece geçmiş + bir sonraki hafta değil, <b>@Model.SelectedTeamName'in sezon boyunca oynadığı bütün maçlar</b> listeleniyor (geçmiş sonuçlar + kalan fikstür).</text>
+            }
+            else
+            {
+                <text><b>Tarih</b> kutusuna bir gün seçersen, o günün içinde olduğu hafta + bir sonraki hafta gösterilir (varsayılan: bugün). Belirli bir takımı takip etmek istiyorsan <b>Takım</b> filtresini kullan — o zaman sezonun tamamı gösterilir.</text>
+            }
             <b>Oynanmış</b> maçlarda tahmin, o maç oynanmadan <b>önceki</b> bilgiyle hesaplanmıştır — gerçek skorla yan yana koyup
             tutarlılığı gözle kontrol edebilirsin. <b>Ev ort. / Dep ort.</b>: takımların gol ortalaması &nbsp;·&nbsp;
             <b>H2H</b>: ikilinin geçmiş karşılaşma sayısı/gol ortalaması &nbsp;·&nbsp; <b>Gol gücü</b>: ikisinin birleşimi &nbsp;·&nbsp;
@@ -142,7 +168,7 @@
         </p>
         @if (Model.WindowFixtures.Count == 0)
         {
-            <div class="empty">Bu lig/sezon için seçili tarih aralığında maç bulunamadı.</div>
+            <div class="empty">@(Model.IsTeamFiltered ? "Bu takım için seçili sezonda maç bulunamadı." : "Bu lig/sezon için seçili tarih aralığında maç bulunamadı.")</div>
         }
         else
         {
@@ -154,6 +180,7 @@
                         <th class="num">H2H</th><th class="num">H2H ort.</th>
                         <th class="num">Gol gücü</th>
                         <th class="num">6+ %</th><th class="num">5+ %</th>
+                        <th>API Tahmini</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -177,10 +204,29 @@
                             <td class="num mono" style="font-weight:800">@f.Combined.ToString("0.00")</td>
                             <td class="num @(f.Plus6Rate > Model.BasePlus6 + 1 ? "b-hi" : "")">%@f.Plus6Rate</td>
                             <td class="num @(f.Plus5Rate > Model.BasePlus5 + 1 ? "b-hi" : "")">%@f.Plus5Rate</td>
+                            <td style="font-size:.78rem;">
+                                @if (f.ApiPercentHome.HasValue)
+                                {
+                                    <span style="color:#8ca0b8;">Ev %@f.ApiPercentHome·B %@f.ApiPercentDraw·Dep %@f.ApiPercentAway</span>
+                                    @if (!string.IsNullOrEmpty(f.ApiAdvice))
+                                    {
+                                        <div style="color:#64748b; font-size:.72rem; margin-top:2px;">@f.ApiAdvice</div>
+                                    }
+                                }
+                                else
+                                {
+                                    <span style="color:#475569;">–</span>
+                                }
+                            </td>
                         </tr>
                     }
                 </tbody>
             </table>
+            <p style="color:#64748b; font-size:.75rem; margin-top:6px;">
+                <b>API Tahmini</b>: api-sports'un KENDİ modelinin galibiyet/beraberlik/mağlubiyet yüzdesi —
+                bizim yukarıdaki "Gol gücü" hesabımızla karıştırılmamalı, sadece karşılaştırma için.
+                "/Sync" ekranındaki "🔮 Tahminler" butonuyla, sadece yakın vadeli (gelecek ~2 hafta) maçlar için çekilir.
+            </p>
         }
 
         <details class="teams">
@@ -188,10 +234,13 @@
             <p style="color:#8ca0b8; font-size:.8rem; margin:2px 0 8px;">
                 <b>Kariyer</b>: takımın tüm maçlarındaki ortalama toplam gol &nbsp;·&nbsp;
                 <b>Son 10</b>: son 10 maçının ortalaması &nbsp;·&nbsp;
-                <b>Gol ort.</b> = (Kariyer + Son 10) / 2 — maç tablosundaki "Ev ort." / "Dep ort." bu.
+                <b>Gol ort.</b> = (Kariyer + Son 10) / 2 — maç tablosundaki "Ev ort." / "Dep ort." bu (ev/deplasman
+                ayrımı YAPMAZ). <b>API Ev/Dep</b> — doluysa — api-sports'un ev/deplasman AYRI hesapladığı ortalama
+                ("/Sync" ekranındaki "📊 Takım İstatistikleri" ile çekilir); ikisi arasında büyük fark varsa
+                bizim ortalamamız o takım için yanıltıcı olabilir demektir.
             </p>
             <table class="grid">
-                <thead><tr><th>Takım</th><th class="num">Maç</th><th class="num">Kariyer</th><th class="num">Son 10</th><th class="num">Gol ort.</th></tr></thead>
+                <thead><tr><th>Takım</th><th class="num">Maç</th><th class="num">Kariyer</th><th class="num">Son 10</th><th class="num">Gol ort.</th><th class="num">API Ev</th><th class="num">API Dep</th></tr></thead>
                 <tbody>
                     @foreach (var t in Model.Teams)
                     {
@@ -201,6 +250,8 @@
                             <td class="num">@t.CareerAvg.ToString("0.00")</td>
                             <td class="num">@t.RecentAvg.ToString("0.00")</td>
                             <td class="num" style="font-weight:800">@t.Blended.ToString("0.00")</td>
+                            <td class="num" style="color:#8ca0b8">@(t.ApiGoalsForAvgHome?.ToString("0.00") ?? "–")</td>
+                            <td class="num" style="color:#8ca0b8">@(t.ApiGoalsForAvgAway?.ToString("0.00") ?? "–")</td>
                         </tr>
                     }
                 </tbody>

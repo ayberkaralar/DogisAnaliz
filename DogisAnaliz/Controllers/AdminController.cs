@@ -33,9 +33,19 @@ public class AdminController : Controller
             .Select(g => g.OrderBy(t => t.Id).ToList())
             .ToList();
 
-        // İkisini birleştir, unique gruplar
+        // Kısa ad / uzun ad farkı: "Tottenham" vs "Tottenham Hotspur FC" (api-sports farklı
+        // zamanlarda farklı ad döndürünce oluşuyor — bkz. CLAUDE.md "Veri bütünlüğü"). ToBaseKey
+        // bunu yakalamaz (sadece FC/SC gibi tek sonek çıkarır), o yüzden ayrı bir O(n²) tarama.
+        var wordSubsetGroups = new List<List<Team>>();
+        for (int i = 0; i < teams.Count; i++)
+            for (int k = i + 1; k < teams.Count; k++)
+                if (TeamNameNormalizer.LooksLikeSameClub(teams[i].Name, teams[k].Name))
+                    wordSubsetGroups.Add(new List<Team> { teams[i], teams[k] });
+
+        // Üçünü birleştir, unique gruplar
         var allDuplicates = duplicates
             .Concat(baseKeyGroups)
+            .Concat(wordSubsetGroups)
             .GroupBy(g => string.Join(",", g.Select(t => t.Id).OrderBy(id => id)))
             .Select(g => g.First())
             .OrderByDescending(g => g.Count)

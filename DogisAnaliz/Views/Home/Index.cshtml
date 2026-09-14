@@ -5,6 +5,7 @@
     var nextDateSort = Model.SortOrder == "date_desc" ? "date_asc"  : "date_desc";
     var view = Model.ViewMode;
     var fixturesMode = view == "fixtures";
+    var standingsMode = view == "standings";
 }
 
 <style>
@@ -46,6 +47,91 @@
             font-weight: bold;
             box-shadow: 0 4px 6px -1px rgba(37, 99, 235, 0.3);
         }
+
+    .sidebar-group summary {
+        cursor: pointer;
+        color: #94a3b8;
+        font-size: 0.78rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        padding: 10px 6px;
+        list-style: none;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+    }
+        .sidebar-group summary::-webkit-details-marker { display: none; }
+        .sidebar-group summary::before {
+            content: "";
+            display: inline-block;
+            width: 0; height: 0;
+            border-top: 4px solid transparent;
+            border-bottom: 4px solid transparent;
+            border-left: 5px solid #64748b;
+            transition: transform 0.15s;
+        }
+        .sidebar-group[open] > summary::before { transform: rotate(90deg); }
+        .sidebar-group:not(:first-of-type) { border-top: 1px solid #334155; margin-top: 8px; padding-top: 2px; }
+
+    /* Seçili ligin özet satırı — <summary> içinde, tıklanabilir görünüm korunur */
+    .league-summary-row {
+        color: #f8fafc;
+        padding: 10px 14px;
+        border-radius: 8px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 10px;
+        flex: 1 1 auto;
+        min-width: 0;
+        background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
+        font-weight: 700;
+        font-size: 0.95rem;
+        box-shadow: 0 4px 6px -1px rgba(37, 99, 235, 0.3);
+    }
+    .league-summary-row > span:first-child {
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        min-width: 0;
+    }
+    .league-summary-row .badge { background: rgba(0,0,0,0.25) !important; flex-shrink: 0; }
+
+    /* Takım listesi — nowrap ŞART: Bootstrap'ın .nav.flex-column'ı hâlâ flex-wrap:wrap
+       bırakır, max-height ile birleşince taşan takımlar yan yana YENİ SÜTUNA geçer.
+       nowrap ile garantili tek sütun + dikey scroll. */
+    .team-list {
+        flex-wrap: nowrap !important;
+        max-height: 360px;
+        overflow-y: auto;
+        overflow-x: hidden;
+        margin: 6px 0 4px 10px;
+        padding-left: 12px;
+        border-left: 2px solid #334155;
+    }
+    .nav-team-item {
+        color: #94a3b8;
+        padding: 8px 12px;
+        border-radius: 7px;
+        text-decoration: none;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 2px;
+        font-size: 0.87rem;
+        transition: background-color 0.15s, color 0.15s, transform 0.1s;
+        width: 100%;
+    }
+        .nav-team-item:hover { background-color: #334155; color: #f1f5f9; transform: translateX(2px); }
+        .nav-team-item.active {
+            background-color: rgba(37, 99, 235, 0.18);
+            color: #93c5fd;
+            font-weight: 700;
+            box-shadow: inset 2px 0 0 #3b82f6;
+        }
+        .nav-team-item .small { opacity: 0.7; font-variant-numeric: tabular-nums; }
 
     .kpi-card {
         background-color: #1e293b;
@@ -165,6 +251,19 @@
         display: inline-block;
     }
 
+    .badge-upcoming {
+        background-color: #334155;
+        color: #cbd5e1;
+        padding: 6px 12px;
+        border-radius: 6px;
+        font-weight: 700;
+        font-size: 0.8rem;
+        letter-spacing: 0.05em;
+        display: inline-block;
+    }
+    .row-upcoming td { opacity: 0.72; }
+    .row-upcoming .col-mac span { color: #94a3b8 !important; }
+
     .badge-highgoal {
         background-color: #0284c7;
         color: #ffffff;
@@ -199,6 +298,40 @@
             color: #ffffff;
             border-color: #2563eb;
         }
+
+    /* Ana sekmeler: Sürpriz / Fikstür — küçük hızlı-filtre butonlarından bilerek ayrı ve
+       belirgin: daha büyük, aralarında boşluk, aktifte dolgu renk + alt çizgi vurgusu. */
+    .main-tabs {
+        display: flex;
+        gap: 16px;
+        margin-bottom: 1.25rem;
+    }
+    .main-tab {
+        background-color: #131c31;
+        border: 1px solid #334155;
+        color: #94a3b8;
+        border-radius: 12px;
+        padding: 14px 28px;
+        text-decoration: none;
+        font-size: 1.1rem;
+        font-weight: 700;
+        transition: all 0.2s;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    }
+        .main-tab:hover {
+            border-color: #475569;
+            color: #f1f5f9;
+            transform: translateY(-1px);
+        }
+        .main-tab.active {
+            background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
+            border-color: #3b82f6;
+            color: #ffffff;
+            box-shadow: 0 8px 16px -4px rgba(37, 99, 235, 0.45);
+        }
+        .main-tab .tab-icon { font-size: 1.3rem; }
 
     .season-select {
         background-color: #0f172a;
@@ -241,26 +374,58 @@
 <div class="container-fluid mt-3 mb-5">
     <div class="row">
         <!-- SOL PANEL (SIDEBAR) -->
-        <div class="col-md-3 col-lg-2 mb-3">
+        <div class="col-md-5 col-lg-4 col-xl-3 mb-3">
             <div class="sidebar shadow-sm">
-                <h5 class="fw-bold mb-3 text-white d-flex align-items-center gap-2">
+                <h5 class="fw-bold mb-2 text-white d-flex align-items-center gap-2">
                     <span>🏆</span> Ligler
                 </h5>
-                <div class="nav flex-column">
-                    @foreach (var league in Model.Leagues)
-                    {
-                        var isActive = league.Id == Model.SelectedLeagueId ? "active" : "";
-                        <a asp-action="Index" asp-route-leagueId="@league.Id" asp-route-seasonId="@Model.SelectedSeasonId" asp-route-sort="@Model.SortOrder" asp-route-view="@view" class="nav-league-item @isActive">
-                            <span>@LeagueDisplayHelper.ToDisplay(league.Name)</span>
-                            <span class="badge bg-dark border border-secondary rounded-pill">@league.SurpriseCount</span>
-                        </a>
-                    }
-                </div>
+
+                @{
+                    var big5 = Model.Leagues.Where(l => l.Tier == 0).ToList();
+                    var others = Model.Leagues.Where(l => l.Tier == 1).ToList();
+                    var secondTier = Model.Leagues.Where(l => l.Tier == 2).ToList();
+                }
+
+                <details class="sidebar-group" open>
+                    <summary>Büyük 5</summary>
+                    <div class="nav flex-column">
+                        @foreach (var league in big5)
+                        {
+                            <partial name="_LeagueSidebarItem" model="@((league, Model))" />
+                        }
+                    </div>
+                </details>
+
+                @if (others.Any())
+                {
+                    <details class="sidebar-group" open>
+                        <summary>Diğer Ligler</summary>
+                        <div class="nav flex-column">
+                            @foreach (var league in others)
+                            {
+                                <partial name="_LeagueSidebarItem" model="@((league, Model))" />
+                            }
+                        </div>
+                    </details>
+                }
+
+                @if (secondTier.Any())
+                {
+                    <details class="sidebar-group" open="@(secondTier.Any(l => l.Id == Model.SelectedLeagueId) ? "open" : null)">
+                        <summary>2. Ligler</summary>
+                        <div class="nav flex-column">
+                            @foreach (var league in secondTier)
+                            {
+                                <partial name="_LeagueSidebarItem" model="@((league, Model))" />
+                            }
+                        </div>
+                    </details>
+                }
             </div>
         </div>
 
         <!-- SAĞ PANEL (ANA ÇALIŞMA ALANI) -->
-        <div class="col-md-9 col-lg-10">
+        <div class="col-md-7 col-lg-8 col-xl-9">
             @if (TempData["SyncResult"] != null)
             {
                 <div class="alert @(TempData["SyncResult"]!.ToString()!.StartsWith("✅") ? "alert-success" : "alert-danger") py-2 mb-3" style="font-size:0.9rem;">
@@ -289,13 +454,15 @@
                 </form>
             </div>
 
+            @if (!standingsMode)
+            {
             <!-- ÜST BAŞLIK VE YIL / SEZON FİLTRESİ -->
             <div class="d-flex flex-wrap justify-content-between align-items-center mb-3 bg-dark p-3 rounded-3 border border-secondary border-opacity-25 shadow-sm">
                 <div>
                     @if (fixturesMode)
                     {
                         <h3 class="fw-bold text-white mb-0">@LeagueDisplayHelper.ToTurkish(Model.SelectedLeagueName) Fikstür &amp; Sonuçlar</h3>
-                        <small class="text-secondary">Tüm maçlar — hafta, İY/MS skoru ve sonuç</small>
+                        <small class="text-secondary">Oynanan maçlar + sezonun kalan fikstürü — hafta, İY/MS skoru ve rakip</small>
                     }
                     else
                     {
@@ -367,20 +534,34 @@
                     }
                 </div>
             </div>
+            }
 
             <!-- SÜRPRİZ / FİKSTÜR SEKMELERİ -->
-            <div class="d-flex gap-2 mb-3">
-                <a asp-action="Index" asp-route-leagueId="@Model.SelectedLeagueId" asp-route-seasonId="@Model.SelectedSeasonId" asp-route-teamId="@Model.SelectedTeamId" asp-route-filter="ALL" asp-route-sort="@Model.SortOrder" asp-route-view="surprise" class="btn-filter @(!fixturesMode ? "active" : "")">🎯 Sürpriz</a>
-                <a asp-action="Index" asp-route-leagueId="@Model.SelectedLeagueId" asp-route-seasonId="@Model.SelectedSeasonId" asp-route-teamId="@Model.SelectedTeamId" asp-route-filter="ALL" asp-route-sort="@Model.SortOrder" asp-route-view="fixtures" class="btn-filter @(fixturesMode ? "active" : "")">📋 Fikstür</a>
+            <div class="main-tabs">
+                <a asp-action="Index" asp-route-leagueId="@Model.SelectedLeagueId" asp-route-seasonId="@Model.SelectedSeasonId" asp-route-teamId="@Model.SelectedTeamId" asp-route-filter="ALL" asp-route-sort="@Model.SortOrder" asp-route-view="surprise" class="main-tab @(!fixturesMode && !standingsMode ? "active" : "")">
+                    <span class="tab-icon">🎯</span> Sürpriz
+                </a>
+                <a asp-action="Index" asp-route-leagueId="@Model.SelectedLeagueId" asp-route-seasonId="@Model.SelectedSeasonId" asp-route-teamId="@Model.SelectedTeamId" asp-route-filter="ALL" asp-route-sort="@Model.SortOrder" asp-route-view="fixtures" class="main-tab @(fixturesMode ? "active" : "")">
+                    <span class="tab-icon">📋</span> Fikstür
+                </a>
+                <a asp-action="Index" asp-route-leagueId="@Model.SelectedLeagueId" asp-route-seasonId="@Model.SelectedSeasonId" asp-route-teamId="@Model.SelectedTeamId" asp-route-filter="ALL" asp-route-sort="@Model.SortOrder" asp-route-view="standings" class="main-tab @(standingsMode ? "active" : "")">
+                    <span class="tab-icon">🏆</span> Puan Durumu
+                </a>
             </div>
 
+            @if (standingsMode)
+            {
+                <partial name="_StandingsTable" model="Model" />
+            }
+            else
+            {
             <!-- KPI ÖZET KARTLARI -->
             <div class="row g-3 mb-4">
                 @if (fixturesMode)
                 {
                     <div class="col-6 col-md-3 col-lg">
                         <div class="kpi-card shadow-sm border-secondary">
-                            <div class="kpi-title text-light">Toplam Maç</div>
+                            <div class="kpi-title text-light">Oynanan Maç</div>
                             <div class="kpi-value text-white">@Model.TotalMatchesCount</div>
                         </div>
                     </div>
@@ -406,6 +587,12 @@
                         <div class="kpi-card shadow-sm border-info border-opacity-50">
                             <div class="kpi-title text-info">Gol Ortalaması</div>
                             <div class="kpi-value text-info">@Model.AvgGoals.ToString("0.00")</div>
+                        </div>
+                    </div>
+                    <div class="col-6 col-md-3 col-lg">
+                        <div class="kpi-card shadow-sm" style="border-color:#a78bfa;">
+                            <div class="kpi-title" style="color:#a78bfa;">🔮 Kalan Fikstür</div>
+                            <div class="kpi-value" style="color:#c4b5fd;">@Model.UpcomingCount</div>
                         </div>
                     </div>
                 }
@@ -443,7 +630,8 @@
                 <div class="d-flex flex-wrap gap-2">
                     @if (fixturesMode)
                     {
-                        <a asp-action="Index" asp-route-leagueId="@Model.SelectedLeagueId" asp-route-seasonId="@Model.SelectedSeasonId" asp-route-teamId="@Model.SelectedTeamId" asp-route-filter="ALL"        asp-route-sort="@Model.SortOrder" asp-route-view="@view" class="btn-filter @(Model.SelectedFilter == "ALL"        ? "active" : "")">Tüm Maçlar (@Model.TotalMatchesCount)</a>
+                        <a asp-action="Index" asp-route-leagueId="@Model.SelectedLeagueId" asp-route-seasonId="@Model.SelectedSeasonId" asp-route-teamId="@Model.SelectedTeamId" asp-route-filter="ALL"        asp-route-sort="@Model.SortOrder" asp-route-view="@view" class="btn-filter @(Model.SelectedFilter == "ALL"        ? "active" : "")">Tümü (@(Model.TotalMatchesCount + Model.UpcomingCount))</a>
+                        <a asp-action="Index" asp-route-leagueId="@Model.SelectedLeagueId" asp-route-seasonId="@Model.SelectedSeasonId" asp-route-teamId="@Model.SelectedTeamId" asp-route-filter="PENDING"    asp-route-sort="@Model.SortOrder" asp-route-view="@view" class="btn-filter @(Model.SelectedFilter == "PENDING"    ? "active" : "")">🔮 Kalan Fikstür (@Model.UpcomingCount)</a>
                         <a asp-action="Index" asp-route-leagueId="@Model.SelectedLeagueId" asp-route-seasonId="@Model.SelectedSeasonId" asp-route-teamId="@Model.SelectedTeamId" asp-route-filter="SURPRISE"   asp-route-sort="@Model.SortOrder" asp-route-view="@view" class="btn-filter @(Model.SelectedFilter == "SURPRISE"   ? "active" : "")">✅ Sürpriz</a>
                         <a asp-action="Index" asp-route-leagueId="@Model.SelectedLeagueId" asp-route-seasonId="@Model.SelectedSeasonId" asp-route-teamId="@Model.SelectedTeamId" asp-route-filter="TURNAROUND" asp-route-sort="@Model.SortOrder" asp-route-view="@view" class="btn-filter @(Model.SelectedFilter == "TURNAROUND" ? "active" : "")">🟠 Dönüş (@Model.TurnaroundCount)</a>
                         <a asp-action="Index" asp-route-leagueId="@Model.SelectedLeagueId" asp-route-seasonId="@Model.SelectedSeasonId" asp-route-teamId="@Model.SelectedTeamId" asp-route-filter="HIGH_GOAL"  asp-route-sort="@Model.SortOrder" asp-route-view="@view" class="btn-filter @(Model.SelectedFilter == "HIGH_GOAL"  ? "active" : "")">🔵 +6 Gol (@Model.HighGoalCount)</a>
@@ -467,7 +655,7 @@
                 </div>
             </div>
 
-            @if (fixturesMode && Model.TeamStats != null)
+            @if (Model.TeamStats != null)
             {
                 var ts = Model.TeamStats;
                 <div class="kpi-card shadow-sm border-secondary mb-3">
@@ -476,6 +664,23 @@
                             <div class="kpi-title text-light">@ts.TeamName — Sezon Özeti</div>
                             <div class="fw-bold fs-5 text-white mt-1">@ts.Played O &nbsp;|&nbsp; @ts.Wins G - @ts.Draws B - @ts.Losses M</div>
                         </div>
+                        @if (ts.LeagueRank.HasValue)
+                        {
+                            <div>
+                                <div class="kpi-title text-light">Lig Sırası</div>
+                                <div class="fw-bold fs-6 mt-1"><span style="color:#fbbf24">#@ts.LeagueRank</span> <span class="text-secondary">— @ts.LeaguePoints puan</span></div>
+                                @if (!string.IsNullOrEmpty(ts.LeagueForm))
+                                {
+                                    <div class="mt-1" style="font-size:0.8rem; letter-spacing:2px;">
+                                        @foreach (var c in ts.LeagueForm)
+                                        {
+                                            var color = c == 'W' ? "#4ade80" : c == 'D' ? "#94a3b8" : "#f87171";
+                                            <span style="color:@color; font-weight:800;">@c</span>
+                                        }
+                                    </div>
+                                }
+                            </div>
+                        }
                         <div>
                             <div class="kpi-title text-light">Gol (A - Y)</div>
                             <div class="fw-bold fs-6 mt-1"><span style="color:#38bdf8">@ts.GoalsFor</span> - <span style="color:#f87171">@ts.GoalsAgainst</span> <span class="text-secondary">(@(ts.GoalDiff > 0 ? "+" : "")@ts.GoalDiff)</span></div>
@@ -534,7 +739,7 @@
                             }
                             @foreach (var match in Model.Matches)
                             {
-                                <tr>
+                                <tr class="@(!match.IsPlayed ? "row-upcoming" : "")">
                                     <td class="col-hafta fw-bold text-light">@match.Week. Hafta</td>
                                     <td class="col-tarih cell-date font-monospace">@match.MatchDate.ToString("dd.MM.yyyy")</td>
                                     <td class="col-mac fw-bold fs-6">
@@ -553,34 +758,46 @@
                                             <span class="text-white">@match.HomeTeam - @match.AwayTeam</span>
                                         }
                                     </td>
-                                    <td class="col-iy font-monospace cell-ht">@match.HtScore</td>
-                                    <td class="col-ms font-monospace cell-ft">@match.FtScore</td>
-                                    <td class="col-sonuc font-monospace cell-code">@match.IyMsCode</td>
-                                    <td class="col-gol font-monospace cell-goals">@match.TotalGoals Gol</td>
-                                    <td class="col-durum">
-                                        @if (match.SurpriseType == "DOUBLE_SURPRISE")
-                                        {
-                                            <span class="badge-double">🟣 DOUBLE</span>
-                                        }
-                                        else if (match.SurpriseType == "TURNAROUND")
-                                        {
-                                            <span class="badge-turnaround">🟠 @match.IyMsCode DÖNÜŞ</span>
-                                        }
-                                        else if (match.SurpriseType == "HIGH_GOAL")
-                                        {
-                                            <span class="badge-highgoal">🔵 +6 GOL</span>
-                                        }
-                                        else if (fixturesMode)
-                                        {
-                                            <span class="text-secondary font-monospace">@match.MsResultCode</span>
-                                        }
-                                    </td>
+                                    @if (!match.IsPlayed)
+                                    {
+                                        <td class="col-iy font-monospace text-secondary">—</td>
+                                        <td class="col-ms font-monospace text-secondary">—</td>
+                                        <td class="col-sonuc font-monospace text-secondary">—</td>
+                                        <td class="col-gol font-monospace text-secondary">—</td>
+                                        <td class="col-durum"><span class="badge-upcoming">🔜 Planlandı</span></td>
+                                    }
+                                    else
+                                    {
+                                        <td class="col-iy font-monospace cell-ht">@match.HtScore</td>
+                                        <td class="col-ms font-monospace cell-ft">@match.FtScore</td>
+                                        <td class="col-sonuc font-monospace cell-code">@match.IyMsCode</td>
+                                        <td class="col-gol font-monospace cell-goals">@match.TotalGoals Gol</td>
+                                        <td class="col-durum">
+                                            @if (match.SurpriseType == "DOUBLE_SURPRISE")
+                                            {
+                                                <span class="badge-double">🟣 DOUBLE</span>
+                                            }
+                                            else if (match.SurpriseType == "TURNAROUND")
+                                            {
+                                                <span class="badge-turnaround">🟠 @match.IyMsCode DÖNÜŞ</span>
+                                            }
+                                            else if (match.SurpriseType == "HIGH_GOAL")
+                                            {
+                                                <span class="badge-highgoal">🔵 +6 GOL</span>
+                                            }
+                                            else if (fixturesMode)
+                                            {
+                                                <span class="text-secondary font-monospace">@match.MsResultCode</span>
+                                            }
+                                        </td>
+                                    }
                                 </tr>
                             }
                         </tbody>
                     </table>
                 </div>
             </div>
+            }
         </div>
     </div>
 </div>

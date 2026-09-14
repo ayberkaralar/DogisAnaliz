@@ -1,5 +1,6 @@
 using DogisAnaliz.Data;
 using DogisAnaliz.Models;
+using DogisAnaliz.Services;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
@@ -69,9 +70,10 @@ public class FixturesController : Controller
             .OrderByDescending(s => s.StartYear)
             .ToListAsync();
 
-        // 4. Varsayılan sezon = en güncel
+        // 4. Varsayılan sezon: önce aktif sezon (LeagueCatalog.ActiveSeasonYear), yoksa en güncel
         if (!seasonId.HasValue)
-            seasonId = vm.Seasons.FirstOrDefault()?.Id;
+            seasonId = vm.Seasons.FirstOrDefault(s => s.SeasonName == LeagueCatalog.ActiveSeasonName)?.Id
+                ?? vm.Seasons.FirstOrDefault()?.Id;
         vm.SelectedSeasonId = seasonId;
         vm.SelectedSeasonName = vm.Seasons.FirstOrDefault(s => s.Id == seasonId)?.SeasonName ?? "";
 

@@ -8,58 +8,115 @@
     <link rel="stylesheet" href="~/lib/bootstrap/dist/css/bootstrap.min.css" />
     <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
     <link rel="stylesheet" href="~/DogisAnaliz.styles.css" asp-append-version="true" />
+    <style>
+        :root {
+            --dg-navbar-bg1: #0f1a2e;
+            --dg-navbar-bg2: #0b1120;
+        }
+        .dg-navbar {
+            background: linear-gradient(135deg, var(--dg-navbar-bg1) 0%, var(--dg-navbar-bg2) 100%);
+            border-bottom: 1px solid #1e293b;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.25);
+            padding: 0.6rem 0;
+        }
+        .dg-brand {
+            color: #f8fafc !important;
+            font-weight: 800;
+            font-size: 1.15rem;
+            letter-spacing: 0.02em;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .dg-navbar .navbar-nav {
+            gap: 4px;
+        }
+        .dg-navbar .nav-link {
+            color: #94a3b8 !important;
+            font-weight: 600;
+            font-size: 0.92rem;
+            padding: 8px 14px !important;
+            border-radius: 8px;
+            transition: all 0.15s;
+            white-space: nowrap;
+        }
+        .dg-navbar .nav-link:hover {
+            color: #f1f5f9 !important;
+            background-color: rgba(255,255,255,0.06);
+        }
+        .dg-navbar .nav-link.active {
+            color: #ffffff !important;
+            background-color: #2563eb;
+            box-shadow: 0 4px 10px -2px rgba(37, 99, 235, 0.5);
+        }
+        .dg-navbar .navbar-toggler {
+            border-color: #334155;
+        }
+        .dg-navbar .navbar-toggler-icon {
+            filter: invert(1);
+        }
+        footer.dg-footer {
+            color: #64748b;
+            border-top: 1px solid #1e293b;
+        }
+        footer.dg-footer a { color: #94a3b8; }
+    </style>
 </head>
 <body>
+    @{
+        string? currentController = ViewContext.RouteData.Values["controller"]?.ToString();
+        string NavClass(string controllerName) =>
+            "nav-link" + (string.Equals(currentController, controllerName, StringComparison.OrdinalIgnoreCase) ? " active" : "");
+    }
     <header>
-        <nav class="navbar navbar-expand-sm navbar-toggleable-sm navbar-light bg-white border-bottom box-shadow mb-3">
-            <div class="container-fluid">
-                <a class="navbar-brand" asp-area="" asp-controller="Home" asp-action="Index">DogisAnaliz</a>
+        <nav class="navbar navbar-expand-lg navbar-toggleable-sm dg-navbar mb-3">
+            <div class="container-fluid px-4">
+                <a class="navbar-brand dg-brand" asp-area="" asp-controller="Home" asp-action="Index">
+                    <span>⚽</span> DogisAnaliz
+                </a>
                 <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target=".navbar-collapse" aria-controls="navbarSupportedContent"
                         aria-expanded="false" aria-label="Toggle navigation">
                     <span class="navbar-toggler-icon"></span>
                 </button>
-                <div class="navbar-collapse collapse d-sm-inline-flex justify-content-between">
+                <div class="navbar-collapse collapse d-lg-inline-flex justify-content-between">
                     <ul class="navbar-nav flex-grow-1">
                         <li class="nav-item">
-                            <a class="nav-link text-dark" asp-area="" asp-controller="Home" asp-action="Index">Ana Sayfa</a>
+                            <a class="@NavClass("Home")" asp-area="" asp-controller="Home" asp-action="Index">Ana Sayfa</a>
                         </li>
                         <li class="nav-item">
-                            <a class="nav-link text-dark" asp-area="" asp-controller="Dogi" asp-action="Index">🐕 Dogi</a>
+                            <a class="@NavClass("Dogi")" asp-area="" asp-controller="Dogi" asp-action="Index">🐕 Dogi</a>
                         </li>
                         <li class="nav-item">
-                            <a class="nav-link text-dark" asp-area="" asp-controller="Bilgi1" asp-action="Index">1️⃣ Bilgi 1</a>
+                            <a class="@NavClass("Bilgi1")" asp-area="" asp-controller="Bilgi1" asp-action="Index">1️⃣ Bilgi 1</a>
                         </li>
                         <li class="nav-item">
-                            <a class="nav-link text-dark" asp-area="" asp-controller="Bilgi4" asp-action="Index">🔢 Bilgi 4</a>
+                            <a class="@NavClass("Bilgi4")" asp-area="" asp-controller="Bilgi4" asp-action="Index">🔢 Bilgi 4</a>
                         </li>
                         <li class="nav-item">
-                            <a class="nav-link text-dark" asp-area="" asp-controller="GolBeklentisi" asp-action="Index">⚽ Gol Beklentisi</a>
+                            <a class="@NavClass("GolBeklentisi")" asp-area="" asp-controller="GolBeklentisi" asp-action="Index">⚽ Gol Beklentisi</a>
                         </li>
                         <li class="nav-item">
-                            <a class="nav-link text-dark" asp-area="" asp-controller="Fixtures" asp-action="Index">📅 Fikstür Takvimi</a>
+                            <a class="@NavClass("Fixtures")" asp-area="" asp-controller="Fixtures" asp-action="Index">📅 Fikstür Takvimi</a>
                         </li>
                         <li class="nav-item">
-                            <a class="nav-link text-dark" asp-area="" asp-controller="Sync" asp-action="Index">📡 Veri Çek</a>
+                            <a class="@NavClass("Sync")" asp-area="" asp-controller="Sync" asp-action="Index">📡 Veri Çek</a>
                         </li>
                         <li class="nav-item">
-                            <a class="nav-link text-dark" asp-area="" asp-controller="Import" asp-action="Index">📥 Excel Aktar</a>
-                        </li>
-                        <li class="nav-item">
-                            <a class="nav-link text-dark" asp-area="" asp-controller="Admin" asp-action="MergeTeams">🔧 Takım Düzelt</a>
+                            <a class="@NavClass("Admin")" asp-area="" asp-controller="Admin" asp-action="MergeTeams">🔧 Takım Düzelt</a>
                         </li>
                     </ul>
                 </div>
             </div>
         </nav>
     </header>
-    <div class="container">
+    <div class="container-fluid px-4">
         <main role="main" class="pb-3">
             @RenderBody()
         </main>
     </div>
 
-    <footer class="border-top footer text-muted">
-        <div class="container">
+    <footer class="dg-footer footer">
+        <div class="container-fluid px-4">
             &copy; 2026 - DogisAnaliz - <a asp-area="" asp-controller="Home" asp-action="Privacy">Privacy</a>
         </div>
     </footer>

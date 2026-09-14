@@ -130,6 +130,24 @@
                                 📅 Fikstür Takvimi @(activeRow.SeasonYear)-@(activeRow.SeasonYear + 1)
                             </button>
                         </form>
+                        <form method="post" action="/Sync/TeamStats" class="mt-1">
+                            @Html.AntiForgeryToken()
+                            <input type="hidden" name="apiLeagueId" value="@activeRow.ApiId" />
+                            <input type="hidden" name="seasonYear"  value="@activeRow.SeasonYear" />
+                            <input type="hidden" name="leagueName"  value="@league" />
+                            <button type="submit" class="btn-sync" title="Ev/deplasman ayrı gol ortalaması, temiz sayfa, kart — takım başına 1 çağrı">
+                                📊 Takım İstatistikleri
+                            </button>
+                        </form>
+                        <form method="post" action="/Sync/Predictions" class="mt-1">
+                            @Html.AntiForgeryToken()
+                            <input type="hidden" name="apiLeagueId" value="@activeRow.ApiId" />
+                            <input type="hidden" name="seasonYear"  value="@activeRow.SeasonYear" />
+                            <input type="hidden" name="leagueName"  value="@league" />
+                            <button type="submit" class="btn-sync" title="Sadece gelecek ~2 hafta içindeki maçlar için api-sports'un kendi tahmini">
+                                🔮 Tahminler (yakın vadeli)
+                            </button>
+                        </form>
                     </td>
                 </tr>
             }

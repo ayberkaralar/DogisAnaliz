@@ -20,6 +20,7 @@ public static class ActiveSeasonRefresher
         AppDbContext ctx,
         FootballApiService api,
         DogiService dogi,
+        StandingsService? standings = null,
         Action<string>? log = null,
         CancellationToken ct = default)
     {
@@ -46,6 +47,14 @@ public static class ActiveSeasonRefresher
                 processed++;
                 if (m > 0) log?.Invoke($"{lc.Name}: {m} yeni maç");
                 await Task.Delay(700, ct);
+
+                // Lig tablosu (Standing) — ucuz (1 çağrı/lig), her Senkronize Et'te tazelenir.
+                if (standings != null)
+                {
+                    try { await standings.SyncStandingsAsync(lc.ApiId, season); }
+                    catch (Exception ex) { log?.Invoke($"Standings HATA {lc.Name}: {ex.Message}"); }
+                    await Task.Delay(300, ct);
+                }
             }
             catch (OperationCanceledException) { break; }
             catch (Exception ex)

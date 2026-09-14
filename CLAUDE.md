@@ -134,7 +134,10 @@ Views, controller adlarıyla birebir eşleşir (standart MVC convention):
    zaten dolu olduğundan **pratikte artık hiçbir şey çekmiyor** (idempotent skip her
    zaman devreye giriyor). Yeni/güncel veri için kullanılmamalı — bkz. "Veri bütünlüğü"
    bölümü, iki kaynağın karışması duplicate takım/maç sorununun kök sebebiydi.
-3. **`ExcelImportService`** — manuel Excel yükleme (Admin/Import ekranından).
+**Not:** Excel içe aktarma (`ExcelImportService`, `ImportController`, `Views/Import`,
+`ExcelDataReader` paket referansı, navbar'daki "📥 Excel Aktar" sekmesi) **tamamen
+kaldırıldı** — kullanıcı talebiyle, "sadece API verileri geçerli sayılabilir" kararı
+kapsamında. Artık sadece yukarıdaki 2 kaynak var.
 
 Her ikisi de (API/OpenFootball) `Program.cs` başlangıcında **idempotent** çalışır:
 DB'de o lig+sezon zaten varsa tekrar çekmez (`ctx.Matches.AnyAsync(...)` kontrolü).
@@ -146,6 +149,42 @@ Yeni bir veri kaynağı eklerken bu idempotency pattern'ini koru.
 kullanılıyor. Yeni bir veri kaynağı eklerken bu normalizer'ı mutlaka kullan,
 yoksa `Team` tablosunda duplicate kayıtlar oluşur (bkz. `AdminController.MergeTeams`
 — zaten var olan duplicate temizleme ekranı).
+
+### Ana Sayfa sol menü: lig grupları + takım listesi (HomeController/Views/Home/Index.cshtml)
+Sol menüde ligler `LeagueDisplayHelper.GetSidebarRank(name, country)` ile 3 gruba
+ayrılır — her grup `<details>` (native, JS'siz açılır/kapanır) içinde:
+- **Büyük 5** (açık): Premier Lig, Almanya Bundesliga, Fransa Ligue 1, İspanya La
+  Liga, İtalya Serie A — bu sabit sırayla.
+- **Diğer Ligler** (açık): kalan 1. ligler, Türkçe ada göre alfabetik.
+- **2. Ligler** (kapalı): `_secondTierNames` içindeki 2. ligler (2. Bundesliga, La
+  Liga 2/Segunda División, Eerste Divisie), alfabetik, en altta.
+
+Yeni bir lig eklenince otomatik doğru gruba düşer; sadece "büyük 5"e yeni bir ülke
+eklenecekse `LeagueDisplayHelper._big5Order`'a `"{Country}_{Name}"` anahtarını ekle.
+
+Ligin altında **Takımlar** grubu — seçili lig + seçili sezondaki tüm takımlar
+alfabetik listelenir (dropdown/arama değil, doğrudan tıklanabilir liste). Bir takıma
+tıklamak `teamId`'yi set eder ve o anki sekmede (Sürpriz/Fikstür/Puan Durumu) kalır;
+Sürpriz veya Fikstür'deyken takım seçiliyse **`TeamStats` paneli** (O/G/B/M, gol,
+ev/deplasman kırılımı, +6 gol/dönüş/sürpriz sayısı, varsa **Lig Sırası**) her zaman
+gösterilir — bu panel `viewModel.Matches`'ten (sekmenin filtrelediği alt küme) değil,
+o takımın o sezondaki **filtresiz tüm maçlarından** ayrı bir sorguyla hesaplanır;
+aksi halde Sürpriz sekmesinde "4 maç" yerine yanlışlıkla "1 sürpriz maçı" gibi görünürdü.
+
+### 3. sekme: Puan Durumu (`view=standings`, Views/Home/_StandingsTable.cshtml)
+Sürpriz/Fikstür'ün yanına eklenen 3. sekme — seçili lig+sezonun güncel lig tablosunu
+(`Standing` tablosundan, bkz. "Ek veri kaynakları" bölümü) rank'a göre sıralı gösterir:
+O/G/B/M/AG/YG/AV/Puan/Form + üç ihtimal rengi (yeşil=Şampiyonlar Ligi, mavi=Avrupa
+kupaları, kırmızı=küme düşme — `Standing.Description` metnine göre heuristik). Sidebar'dan
+seçili takım varsa o satır mavi çerçeveyle vurgulanır. `HomeController.Index`'te
+`standingsMode` bloğu `Match`/`FixtureSchedule` sorgu hattının TAMAMINI atlar (KPI/filtre/
+sıralama/TeamStats hiçbiri çalışmaz) — sadece `Standings` tablosunu okur; bu yüzden yeni bir
+"3. sekme" eklerken bu izole-if-else desenini örnek al (KPI kartları + hızlı filtreler +
+maç tablosu tek bir `@if (!standingsMode) { ... } else { <partial standings> }` bloğu
+içinde). **Dikkat:** yeni bir sekme eklerken `!fixturesMode`'u "sürpriz sekmesi aktif"
+anlamında kullanan her yeri (`class="main-tab @(!fixturesMode ? ...)"` gibi) yeni sekmeyi
+de hariç tutacak şekilde güncelle — aksi halde iki sekme birden "active" görünür (bu hata
+bir kez yapıldı, düzeltildi).
 
 ## Kod stili / konvansiyonlar
 
@@ -186,6 +225,19 @@ Doldurulması: `Services/FixtureScheduleService.SyncScheduleAsync` — `/Sync` e
 senkronuna dahil değil). `Controllers/FixturesController.cs` + `Views/Fixtures/Index.cshtml`
 bunu lig/sezon/hafta/takım/durum filtreleriyle listeler.
 
+**Ana Sayfa'nın "📋 Fikstür" sekmesi de aynı veriyi kullanır** (`HomeController.Index`,
+`fixturesMode` bloğu, adım 10b): sadece `Matches` (oynanmış) değil, seçili lig+sezonun
+`FixtureSchedule` kayıtlarından henüz oynanmamış olanları da tabloya ekler — kullanıcı bir
+takımı seçtiğinde sezon boyunca kalan rakiplerini de görebilsin diye (`filter=ALL` hepsini,
+`filter=PENDING` sadece kalanları gösterir; sonuç gerektiren SURPRISE/TURNAROUND/HIGH_GOAL/
+NORMAL filtrelerinde eklenmez). Aynı "oynanmış maç `FixtureSchedule`'da hâlâ NS görünebilir"
+sorununa karşı aynı dedupe deseni kullanılır (hafta+ev+dep anahtarıyla). `MatchRowDto.IsPlayed`
+bu satırları ayırt eder (view'da soluk/"🔜 Planlandı" gösterilir). Bu iki ekran (Fikstür
+Takvimi sayfası ile Ana Sayfa'nın Fikstür sekmesi) artık aynı amaca hizmet ediyor gibi
+görünse de öyle değil: Fikstür Takvimi sayfası ligler-arası ham takvim taraması içindir,
+Ana Sayfa'nın Fikstür sekmesi ise sürpriz analiziyle aynı ekranda, takım bazlı bütünsel
+görünüm sağlar — ikisini birbirinin yerine geçecek şekilde birleştirmeye çalışma.
+
 Bir maç `FixtureSchedule`'da NS (oynanmamış) olarak görünüp `Match` tablosunda karşılığı
 varsa (aynı LeagueId+SeasonId+HomeTeamId+AwayTeamId+Week), **`Match` esas alınır** —
 oynanmışsa gerçek sonuç odur; `FixtureSchedule.Status` senkronlanana kadar geride
@@ -194,11 +246,21 @@ kalabilir (aşağıdaki "Senkronize Et" fikstür takvimini güncellemez, sadece 
 ### `LeagueCatalog` (Services/LeagueCatalog.cs) — desteklenen 14 lig + sezon listesi
 `SyncController`'daki `KnownLeagues`/`KnownSeasons` buraya taşındı (ortak kullanım için).
 `ActiveSeasonYear` sabiti = içinde bulunulan sezonun başlangıç yılı (örn. 2026 →
-"2026-2027"). Yeni bir lig eklerken buraya ekle, `SyncController` ve
+"2026-2027"). `ActiveSeasonName` (`"{year}-{year+1}"`) → `Season.SeasonName` ile
+birebir eşleşir. Yeni bir lig eklerken buraya ekle, `SyncController` ve
 `ActiveSeasonRefresher` otomatik kullanır. **Dikkat:** aynı isimli iki lig olabilir
 (örn. "Bundesliga" Almanya + Avusturya) — isim eşleştirmesi yapan her yerde
 `.DistinctBy(l => l.Name)` ile teke indirilmeli, yoksa yanlış lige veri yazılır
 (`FootballApiService` ligi sadece isimle eşleştiriyor).
+
+**Varsayılan sezon kuralı**: kullanıcı talebiyle, sezon seçimi olan tüm ekranlar
+(`HomeController`, `FixturesController`, `GolBeklentisiController`) varsayılan olarak
+önce `LeagueCatalog.ActiveSeasonName`'i (o lig+sezon kombinasyonu mevcutsa) seçer,
+yoksa en güncel sezona düşer. Eskiden `HomeController` bunu `Matches.OrderByDescending
+(m => m.SeasonId)` ile (StartYear değil, DB Id'sine göre) seçiyordu — sezonlar
+kronolojik olmayan sırada eklenmişse yanlış sezon varsayılan gelebiliyordu; artık
+`ActiveSeasonName` ile doğrudan eşleştiriliyor. Yeni bir sezon-filtreli ekran
+eklerken bu deseni kullan.
 
 ### "Senkronize Et" — tek düğmeyle tüm liglerin aktif sezonunu güncelle
 Ana Sayfa'daki **"🔄 Senkronize Et"** butonu → `POST /Sync/RefreshAllActive` →
@@ -287,5 +349,82 @@ farkını çözmez** — bu yüzden hâlâ elle birleştirme gerekebilir (`Admin
 - Lig tekrarı da olabilir (örn. "Jupiler Pro League" / "Belgian Pro League" aynı
   lig, iki kaynaktan geldi) — bunlar için henüz kalıcı bir UI yok, elle SQL/script
   ile birleştirildi.
+- **Kısa ad / uzun ad tekrarı (api-sports kaynaklı)**: aynı kulüp için api-sports
+  bazen kısa ("Tottenham") bazen uzun ("Tottenham Hotspur FC") ad döndürüyor —
+  `ToBaseKey`'in yakaladığı FC/SC sonek farkından farklı bir durum (kelime sayısı
+  farklı). Tespit edilen örnekler: Tottenham/Tottenham Hotspur FC, Real Betis/Real
+  Betis Balompié, Heracles/Heracles Almelo, AZ/AZ Alkmaar, NEC/NEC Nijmegen, Casa
+  Pia/Casa Pia AC, Rayo Vallecano/Rayo Vallecano De Madrid, Real Sociedad/Real
+  Sociedad De Fútbol. Somut belirti: yeni sync'lenen maç `FixtureSchedule`'daki
+  (eski takım ID'li) NS kaydıyla eşleşemiyor → oynanmış maç, ilgili ekranda (örn.
+  Gol Beklentisi penceresi) hâlâ "oynanmamış tahmin" olarak görünmeye devam ediyor.
+  Artık `TeamNameNormalizer.LooksLikeSameClub` bu deseni tanıyıp `Admin/MergeTeams`
+  otomatik listesine ekliyor (rezerv takımları — "II"/"B"/"U21" vb. — gerçekten
+  farklı takım olduğu için hariç tutulur, örn. "Villarreal" ≠ "Villarreal II").
+  Yeni bir lig ilk kez API'den senkronize edildiğinde bu tür çiftler tekrar
+  oluşabilir — `Admin/MergeTeams` sayfası kontrol edilmeli.
+- **Tarih/saat dilimi hatası (düzeltildi)**: `FootballApiService.SyncLeagueSeasonAsync`
+  api-sports'un döndürdüğü offset'li tarihi (`"+01:00"` gibi) `.ToUniversalTime()`
+  çağırmadan doğrudan `DateTime.SpecifyKind(...,Utc)` ile etiketliyordu — System.Text.Json
+  offset sıfır değilse tarihi **sunucunun yerel saatine** çevirip `Kind=Local` veriyor;
+  bu değeri sonradan "Utc" diye etiketlemek `Match.MatchDate`'i sunucunun UTC farkı kadar
+  (bu sunucuda +3 saat) ileri kaydırıyordu — bazı akşam maçları ertesi güne kayıyordu.
+  `FixtureScheduleService.SyncScheduleAsync` zaten doğru yapıyordu (`.ToUniversalTime()`
+  ekli). Düzeltme: `FootballApiService`'e de aynı `.ToUniversalTime()` eklendi. **Not:**
+  bu düzeltme sadece BUNDAN SONRAKİ sync'lerde doğru tarih üretir; düzeltme öncesi
+  API'den çekilmiş eski `Match.MatchDate` değerleri hâlâ kaymış olabilir (haftayı
+  değiştirmez, sadece o günün/saatinin görünümünü etkiler) — geriye dönük toplu
+  düzeltme henüz yapılmadı.
+
+## Ek veri kaynakları — Standings / TeamSeasonStats / FixturePrediction
+
+Analiz çeşitliliğini artırmak için api-sports'un 3 ek ucu eklendi. Üçü de mevcut
+"kalibre edilmiş" modelleri (BİLGİ 1/4, Gol Beklentisi) **DEĞİŞTİRMEZ** — sadece ek
+bilgi/karşılaştırma katmanıdır.
+
+### `Team.ApiTeamId` (yeni alan) — önce bunu anla
+`teams/statistics` ve `predictions` uçları api-sports'un KENDİ takım id'sini ister
+(bizim `Team.Id`'miz değil). Bu yüzden `FootballApiService` ve `FixtureScheduleService`
+artık her maç/fikstür senkronunda `teams.home/away.id`'yi de yakalayıp `Team.ApiTeamId`'ye
+yazıyor (sadece `null` ise — üzerine yazmaz). **Sonuç:** bir lig+sezon için önce en az bir
+maç veya fikstür senkronu (Senkronize Et / Fikstür Takvimi) çalışmış olmalı, yoksa o ligin
+takımlarının `ApiTeamId`'si boş kalır ve aşağıdaki iki özellik o takımları atlar.
+
+### `Standing` (Services/StandingsService.cs) — lig tablosu
+api-sports `standings` ucundan (1 çağrı/lig) rank/puan/form/ev-deplasman ayrı istatistik
+çeker, `(LeagueId,SeasonId,TeamId)` başına TEK güncel satır tutar (geçmiş saklanmaz).
+Ucuz olduğu için **`ActiveSeasonRefresher`'a dahil** — "Senkronize Et" her tıklandığında
+otomatik tazelenir. `HomeController`'da seçili takımın "Sezon Özeti" paneline **Lig Sırası**
+(rank + puan + renkli form dizisi) olarak yansır — `Standing` kaydı yoksa panel sessizce
+gizlenir.
+
+### `TeamSeasonStat` (Services/TeamStatisticsService.cs) — takım özet istatistikleri
+api-sports `teams/statistics` ucundan (**takım başına 1 çağrı** — ligin tamamını tek
+seferde vermez, standings gibi ucuz değil) ev/deplasman AYRI gol ortalaması, temiz sayfa,
+penaltı, sarı/kırmızı kart toplamı çeker. Maliyeti yüzünden **Senkronize Et'e dahil değil**
+— `/Sync` ekranında lig+sezon başına ayrı "📊 Takım İstatistikleri" butonu (elle tetiklenir).
+`GolBeklentisiController`'da "Takım gol ortalamaları" tablosuna **API Ev / API Dep** sütunu
+olarak eklenir — bizim `Blended` hesabımız (kariyer+son10, ev/deplasman ayrımı YAPMAZ) ile
+karşılaştırma için; aralarında büyük fark varsa o takım için kendi ortalamamız yanıltıcı
+olabilir demektir (ör. evinde çok golcü, deplasmanda kısır bir takım).
+
+### `FixturePrediction` (Services/PredictionService.cs) — api-sports'un kendi tahmini
+api-sports `predictions` ucundan (**maç başına 1 çağrı**) kazanan/beraberlik/kaybeden
+yüzdesi + serbest metin tavsiye ("Double chance: draw or Team" vb.) çeker. Maliyeti
+yüzünden sadece **yakın vadeli** (varsayılan ~2 hafta, `PredictionService.DefaultWeeksAhead`)
+OYNANMAMIŞ maçlar için, `/Sync` ekranındaki "🔮 Tahminler" butonuyla elle çekilir; zaten
+24 saatten yeni bir kaydı olan maçı tekrar çekmez (gereksiz API çağrısı önlenir).
+`GolBeklentisiController`'da pencere/takım tablosuna **"API Tahmini"** sütunu olarak
+eklenir (`(HomeTeamId,AwayTeamId)` ile eşleştirilir) — kendi "Gol gücü" hesabımızla
+KARIŞTIRILMAMALI, sadece yan yana benchmark içindir.
+
+### Dikkat: EF Core'un çeviremediği LINQ kalıpları (bu üçünü yazarken 2 kez karşılaşıldı)
+- `query.SelectMany(x => new[] { x.A, x.B })` — array-literal projeksiyonu SQL'e çevrilemiyor
+  ("could not be translated" hatası). Çözüm: `A` ve `B`'yi AYRI `Select()` sorgularıyla çekip
+  `Concat()` ile client tarafında birleştir (zaten `HomeController`'da kullanılan desen).
+- `_context.X.FirstOrDefaultAsync(x => bellekteki_dizi.Where(...).Select(...).Contains(x.Y))`
+  — in-memory bir diziyi sorgu içinde filtreleyip `Contains` ile karşılaştırmak da çevrilemiyor.
+  Çözüm: önce bellek tarafında (LINQ-to-Objects) tek değeri bul, SONRA basit bir EF sorgusu yaz.
+  (`TeamStatisticsService.SyncLeagueSeasonAsync` ve `SyncController.Predictions`'ta düzeltildi.)
 
 
