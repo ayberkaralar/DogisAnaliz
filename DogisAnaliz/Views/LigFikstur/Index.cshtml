@@ -1,0 +1,266 @@
+@model DogisAnaliz.Models.LigFiksturViewModel
+@{
+    ViewData["Title"] = "Lig Fikstür — Hafta İçi Desen";
+}
+
+<style>
+    body { background:#0b1120; color:#e2e8f0; font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif; }
+    .lf { max-width:1200px; margin:0 auto; padding:0 16px; }
+
+    .lf-head { display:flex; align-items:baseline; gap:12px; flex-wrap:wrap; margin:22px 0 6px; }
+    .lf-head h4 { font-weight:800; letter-spacing:.5px; margin:0; }
+    .lf-head .sub { color:#94a3b8; font-size:.92rem; }
+
+    .lf-note { color:#8ca0b8; font-size:.82rem; line-height:1.55; margin-bottom:18px; border-left:3px solid #db2777; padding-left:12px; }
+
+    .lf-bar { display:flex; gap:14px; flex-wrap:wrap; align-items:center; margin-bottom:18px; }
+    .lf-bar label { color:#94a3b8; font-size:.8rem; font-weight:600; text-transform:uppercase; letter-spacing:.04em; }
+    .lf-bar select { background:#131c2e; color:#e2e8f0; border:1px solid #2b3a52; border-radius:9px; padding:7px 13px; font-weight:600; font-size:.9rem; }
+    .lf-bar select:focus { outline:none; border-color:#db2777; }
+    .lf-bar a.reset { color:#8ca0b8; font-size:.8rem; text-decoration:underline; }
+
+    .lf-kpis { display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin-bottom:14px; }
+    @@media (max-width:720px){ .lf-kpis { grid-template-columns:repeat(2,1fr); } }
+    .kpi { background:#131c2e; border:1px solid #223049; border-radius:12px; padding:14px 16px; }
+    .kpi .k { font-size:.72rem; color:#8ca0b8; text-transform:uppercase; letter-spacing:.05em; font-weight:700; }
+    .kpi .v { font-size:1.7rem; font-weight:800; margin-top:3px; line-height:1; }
+    .kpi .s { font-size:.74rem; color:#64748b; margin-top:4px; }
+
+    .verdict { border-radius:11px; padding:12px 16px; margin-bottom:22px; font-size:.9rem; font-weight:600; }
+
+    .live-box { background:#1c1033; border:1px solid #a21caf; border-radius:14px; padding:16px 18px; margin-bottom:22px; }
+    .live-round { border-bottom:1px solid #3b0764; padding-bottom:12px; margin-bottom:12px; }
+    .live-round:last-child { border-bottom:none; margin-bottom:0; padding-bottom:0; }
+    .live-round-hd { font-weight:800; color:#f0abfc; margin-bottom:6px; }
+    .cand { display:inline-block; background:#3b0764; color:#f5d0fe; padding:5px 11px; border-radius:8px; font-size:.82rem; font-weight:700; margin:2px 6px 2px 0; }
+
+    .league-tbl { width:100%; border-collapse:collapse; margin-bottom:22px; }
+    .league-tbl th { text-align:left; font-size:.72rem; text-transform:uppercase; letter-spacing:.05em; color:#7d8ea6; font-weight:700; padding:9px 10px; }
+    .league-tbl td { padding:10px 10px; border-top:1px solid #1c2740; font-size:.9rem; }
+    .league-tbl tr:hover td { background:#111a2c; }
+
+    table.grid { width:100%; border-collapse:collapse; }
+    table.grid th { text-align:left; font-size:.72rem; text-transform:uppercase; letter-spacing:.05em; color:#7d8ea6; font-weight:700; padding:9px 10px; }
+    table.grid td { padding:9px 10px; border-top:1px solid #1c2740; font-size:.87rem; vertical-align:top; }
+    .season-hd { display:flex; align-items:baseline; gap:14px; padding:9px 4px; border-bottom:2px solid #db2777; margin:18px 0 4px; }
+    .season-hd .yr { font-size:1rem; font-weight:800; color:#f472b6; letter-spacing:.4px; }
+    .season-hd .meta { font-size:.8rem; color:#8ca0b8; }
+
+    .badge-22 { display:inline-block; background:#1e3a5f; color:#93c5fd; padding:2px 7px; border-radius:6px; font-size:.72rem; font-weight:800; margin-left:6px; }
+    .badge-turn { display:inline-block; background:#ea580c; color:#fff; padding:2px 7px; border-radius:6px; font-size:.72rem; font-weight:800; margin-left:6px; }
+    .badge-high { display:inline-block; background:#0284c7; color:#fff; padding:2px 7px; border-radius:6px; font-size:.72rem; font-weight:800; margin-left:6px; }
+    .badge-double { display:inline-block; background:#7c3aed; color:#fff; padding:2px 7px; border-radius:6px; font-size:.72rem; font-weight:800; margin-left:6px; }
+    .tag-hit { display:inline-block; background:#16a34a; color:#fff; padding:3px 10px; border-radius:999px; font-size:.72rem; font-weight:800; }
+    .tag-miss { display:inline-block; background:#334155; color:#94a3b8; padding:3px 10px; border-radius:999px; font-size:.72rem; font-weight:800; }
+    .mono { font-family:ui-monospace,Menlo,Consolas,monospace; }
+    .empty { text-align:center; color:#64748b; padding:26px 0; }
+    details.rounds summary { cursor:pointer; color:#f472b6; font-weight:700; padding:10px 4px; }
+</style>
+
+<div class="lf">
+    <div class="lf-head">
+        <h4>🗓️ LİG FİKSTÜR</h4>
+        <span class="sub">Aynı haftanın farklı maçları arasındaki desen — tüm ligler</span>
+    </div>
+
+    <div class="lf-note">
+        <b>BİLGİ 1/4'ten farkı:</b> onlar bir takımın kendi ardışık haftalarına bakar; bu analiz
+        <b>aynı haftadaki FARKLI maçlara</b> bakar (sırayla değil, aralarında).<br>
+        <b>Tetikleyici:</b> bir hafta (round) içinde bir yerde <b>2-2</b> bitmiş bir maç VAR, ve
+        aynı haftada (farklı bir maçta) zaten <b>bir sürpriz</b> (dönüş ya da +6 gol, ör. 5-1) VAR.<br>
+        <b>İSABET — ÇEŞİT ÖNEMLİ:</b> +6 gollü maç + 2-2 varsa, İSABET için o hafta ayrıca (farklı
+        bir maçta) bir <b>DÖNÜŞ</b> olmalı. Dönüş + 2-2 varsa, İSABET için ayrıca bir <b>+6 gol</b>
+        olmalı. Yani <u>iki FARKLI çeşit</u> sürpriz bir aradaysa isabet — aynı çeşitten iki tane
+        (örn. iki ayrı +6'lı maç) İSABET SAYILMAZ.<br>
+        <b>Örnek (Süper Lig 5. hafta):</b> Samsunspor–Çorum FK 1-5 (+6 gol) VE Alanyaspor–Göztepe
+        2-2 aynı haftada → tetikleyici oluştu. O hafta ayrıca Gençlerbirliği–Kasımpaşa 1/2 DÖNÜŞ ile
+        bitti → <b>farklı çeşitten 2. sürpriz geldi → İSABET.</b> (Almanya Bundesliga 16. hafta gibi
+        2-2 + iki ayrı +6'lı maç olup hiç dönüş olmayan bir hafta İSABET SAYILMAZ.)<br>
+        <b>İzlenen çıktı:</b> tetikleyici oluşan haftaların yüzde kaçında gerçekten farklı çeşitten
+        2. bir sürpriz çıkmış — bu, "rastgele bir haftada zaten hem +6 hem dönüş birlikte bulunma
+        ihtimali"yle (taban oranı) kıyaslanır.
+    </div>
+
+    @if (Model.Leagues.Count == 0)
+    {
+        <div class="empty">Henüz maç verisi yok.</div>
+    }
+    else
+    {
+        <form method="get" action="/LigFikstur" class="lf-bar">
+            <span><label>Lig</label>&nbsp;
+                <select name="leagueId" onchange="this.form.submit()">
+                    <option value="" selected="@(!Model.SelectedLeagueId.HasValue)">Tüm Ligler</option>
+                    @foreach (var l in Model.Leagues)
+                    {
+                        <option value="@l.Id" selected="@(l.Id == Model.SelectedLeagueId)">@LeagueDisplayHelper.ToTurkish(l.Name, l.Country)</option>
+                    }
+                </select>
+            </span>
+            <span><label>Sezon</label>&nbsp;
+                <select name="seasonId" onchange="this.form.submit()">
+                    <option value="" selected="@(!Model.SelectedSeasonId.HasValue)">Tüm Sezonlar</option>
+                    @foreach (var s in Model.Seasons)
+                    {
+                        <option value="@s.Id" selected="@(s.Id == Model.SelectedSeasonId)">@s.SeasonName</option>
+                    }
+                </select>
+            </span>
+            @if (Model.SelectedLeagueId.HasValue || Model.SelectedSeasonId.HasValue)
+            {
+                <a class="reset" href="/LigFikstur">filtreyi temizle — tüm ligler/sezonlar</a>
+            }
+        </form>
+
+        @if (Model.TotalRoundsScanned == 0)
+        {
+            <div class="empty">Bu seçimde tamamlanmış hafta bulunamadı.</div>
+        }
+        else
+        {
+        <div class="lf-kpis">
+            <div class="kpi">
+                <div class="k">Taranan hafta (round)</div>
+                <div class="v" style="color:#e2e8f0">@Model.TotalRoundsScanned</div>
+                <div class="s">@(Model.SelectedLeagueId.HasValue ? LeagueDisplayHelper.ToTurkish(Model.Leagues.First(l => l.Id == Model.SelectedLeagueId).Name) : "tüm ligler")@(Model.SelectedSeasonId.HasValue ? $" · {Model.Seasons.First(s => s.Id == Model.SelectedSeasonId).SeasonName}" : ""), tamamlanmış haftalar</div>
+            </div>
+            <div class="kpi">
+                <div class="k">Taban: farklı çeşit oranı</div>
+                <div class="v" style="color:#94a3b8">%@Model.BaseMultiSurpriseRate</div>
+                <div class="s">@Model.BaseMultiSurpriseCount / @Model.TotalRoundsScanned — herhangi bir haftada rastgele hem +6 hem dönüş birlikte bulunma ihtimali</div>
+            </div>
+            <div class="kpi">
+                <div class="k">Tetikleyici oluşan hafta</div>
+                <div class="v" style="color:#f472b6">@Model.TriggerRoundCount</div>
+                <div class="s">aynı haftada 2-2 + en az 1 sürpriz birlikte</div>
+            </div>
+            <div class="kpi">
+                <div class="k">Bunların isabet oranı</div>
+                <div class="v" style="color:#fb923c">%@Model.TriggerHitRate</div>
+                <div class="s">@Model.TriggerHitCount / @Model.TriggerRoundCount — farklı çeşitten 2. sürpriz de gelmiş</div>
+            </div>
+        </div>
+
+        @if (Model.TriggerRoundCount == 0)
+        {
+            <div class="verdict" style="background:#131c2e; color:#8ca0b8;">Henüz hiçbir ligde bu tetikleyici oluşmamış.</div>
+        }
+        else if (Model.RateDiff >= 5)
+        {
+            <div class="verdict" style="background:#14361f; color:#bbf7d0;">
+                Tetikleyici oluşan haftalarda 2. sürpriz oranı (%@Model.TriggerHitRate) taban orandan (%@Model.BaseMultiSurpriseRate) belirgin şekilde yüksek — fark +%@Model.RateDiff. Örneklem küçükse (yukarıdaki "tetikleyici oluşan hafta" sayısına bak) temkinli yorumla.
+            </div>
+        }
+        else if (Model.RateDiff <= -5)
+        {
+            <div class="verdict" style="background:#3a1d12; color:#fed7aa;">
+                Tetikleyici oluşan haftalarda 2. sürpriz oranı (%@Model.TriggerHitRate) taban orandan (%@Model.BaseMultiSurpriseRate) düşük — fark %@Model.RateDiff. Bu desenin öngörü değeri yok görünüyor.
+            </div>
+        }
+        else
+        {
+            <div class="verdict" style="background:#131c2e; color:#8ca0b8;">
+                Tetikleyici oluşan haftalardaki 2. sürpriz oranı (%@Model.TriggerHitRate) taban oranla (%@Model.BaseMultiSurpriseRate) pratikte aynı — bu desenin öngörü avantajı zayıf/yok. BİLGİ 1/4'te olduğu gibi: taban oranla kıyaslamadan bu deseni "işe yarıyor" sayma.
+            </div>
+        }
+
+        @if (Model.LivePending.Count > 0)
+        {
+            <div class="live-box">
+                <div class="live-round-hd" style="font-size:1rem; margin-bottom:10px;">
+                    🔮 Şu An Tetiklenmiş — Bekleyen Adaylar
+                </div>
+                @foreach (var r in Model.LivePending)
+                {
+                    <div class="live-round">
+                        <div class="live-round-hd">@LeagueDisplayHelper.ToTurkish(r.LeagueName) — @r.SeasonName, @r.Week. Hafta</div>
+                        <div style="font-size:.82rem; color:#8ca0b8; margin-bottom:6px;">
+                            Bu haftanın oynanan maçları:
+                            @foreach (var m in r.PlayedMatches)
+                            {
+                                <span class="mono" style="color:#cbd5e1;">@m.HomeTeam @m.FtScore @m.AwayTeam</span>
+                                @if (m.Is22) { <span class="badge-22">2-2</span> }
+                                @if (m.SurpriseType == "TURNAROUND") { <span class="badge-turn">DÖNÜŞ</span> }
+                                @if (m.SurpriseType == "HIGH_GOAL") { <span class="badge-high">+6</span> }
+                                @if (m.SurpriseType == "DOUBLE_SURPRISE") { <span class="badge-double">ÇİFTE</span> }
+                                <span style="color:#475569;"> · </span>
+                            }
+                        </div>
+                        <div>
+                            <span style="font-size:.82rem; color:#8ca0b8;">Aday (henüz oynanmadı):</span><br>
+                            @foreach (var c in r.Candidates)
+                            {
+                                <span class="cand">@c.HomeTeam – @c.AwayTeam (@c.KickoffTr.ToString("dd.MM HH:mm"))</span>
+                            }
+                        </div>
+                    </div>
+                }
+            </div>
+        }
+
+        @if (Model.LeagueStats.Count > 0)
+        {
+            <div class="season-hd"><span class="yr">Lig Bazında Kırılım</span></div>
+            <table class="league-tbl">
+                <thead>
+                    <tr><th>Lig</th><th class="mono">Taranan Hafta</th><th class="mono">Tetikleyici</th><th class="mono">İsabet</th><th class="mono">Oran</th></tr>
+                </thead>
+                <tbody>
+                    @foreach (var l in Model.LeagueStats)
+                    {
+                        <tr>
+                            <td>@LeagueDisplayHelper.ToTurkish(l.LeagueName)</td>
+                            <td class="mono">@l.RoundsScanned</td>
+                            <td class="mono">@l.TriggerRounds</td>
+                            <td class="mono">@l.HitRounds</td>
+                            <td class="mono" style="font-weight:800; color:@(l.TriggerHitRate > Model.BaseMultiSurpriseRate + 5 ? "#4ade80" : l.TriggerHitRate < Model.BaseMultiSurpriseRate - 5 ? "#f87171" : "#94a3b8")">%@l.TriggerHitRate</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        }
+
+        @if (Model.TriggerRounds.Count > 0)
+        {
+            <details class="rounds">
+                <summary>Tetikleyici oluşan tüm haftaların detayı (@Model.TriggerRounds.Count hafta)</summary>
+                @foreach (var seasonGrp in Model.TriggerRounds.GroupBy(r => r.SeasonName))
+                {
+                    <div class="season-hd"><span class="yr">@seasonGrp.Key</span></div>
+                    @foreach (var r in seasonGrp)
+                    {
+                        <table class="grid" style="margin-bottom:14px;">
+                            <thead>
+                                <tr>
+                                    <th style="width:220px;">@LeagueDisplayHelper.ToTurkish(r.LeagueName) — @r.Week. Hafta</th>
+                                    <th>Skor</th>
+                                    <th>Durum</th>
+                                    <th style="width:90px; text-align:right;">
+                                        @if (r.IsHit) { <span class="tag-hit">İSABET</span> } else { <span class="tag-miss">isabet yok</span> }
+                                    </th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var m in r.Matches)
+                                {
+                                    <tr>
+                                        <td>@m.HomeTeam – @m.AwayTeam</td>
+                                        <td class="mono">@m.FtScore (@m.TotalGoals gol)</td>
+                                        <td>
+                                            @if (m.Is22) { <span class="badge-22">2-2</span> }
+                                            @if (m.SurpriseType == "TURNAROUND") { <span class="badge-turn">DÖNÜŞ</span> }
+                                            @if (m.SurpriseType == "HIGH_GOAL") { <span class="badge-high">+6 GOL</span> }
+                                            @if (m.SurpriseType == "DOUBLE_SURPRISE") { <span class="badge-double">ÇİFTE</span> }
+                                        </td>
+                                        <td></td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    }
+                }
+            </details>
+        }
+        }
+    }
+</div>

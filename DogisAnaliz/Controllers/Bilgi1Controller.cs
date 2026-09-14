@@ -1,5 +1,6 @@
 using DogisAnaliz.Data;
 using DogisAnaliz.Models;
+using DogisAnaliz.Services;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
@@ -23,6 +24,11 @@ public class Bilgi1Controller : Controller
         string HomeName, string AwayName,
         bool Played, bool Turn, string Ht, string Ft, string IyMs,
         DateTime Date, DateTime? Kickoff);
+
+    private sealed record ScanResult(
+        List<Bilgi1RowDto> Rows, List<Bilgi1RowDto> PendingRows,
+        int EligiblePivotCount, int EligibleTurnaroundCount,
+        int Bilgi1Count, int Bilgi1TurnaroundCount);
 
     public async Task<IActionResult> Index(int? leagueId, int? seasonId)
     {
@@ -59,10 +65,52 @@ public class Bilgi1Controller : Controller
             ? vm.Seasons.FirstOrDefault(s => s.Id == seasonId.Value)?.SeasonName ?? ""
             : "Tüm sezonlar";
 
-        // --- Oynanmış maçlar ---
+        var result = await ScanLeagueAsync(leagueId.Value, seasonId);
+        vm.Rows = result.Rows;
+        vm.PendingRows = result.PendingRows;
+        vm.EligiblePivotCount = result.EligiblePivotCount;
+        vm.EligibleTurnaroundCount = result.EligibleTurnaroundCount;
+        vm.Bilgi1Count = result.Bilgi1Count;
+        vm.Bilgi1TurnaroundCount = result.Bilgi1TurnaroundCount;
+
+        // --- Tüm liglerde bekleyen tahminler (seçili ligden bağımsız) ---
+        // "Bu hafta Süper Lig'de desen tutan bir maç var ama ben Premier Lig'i açık tutuyorum,
+        // hiç görmedim" şikayetine karşı: aktif sezonun tüm ligleri taranır, sadece önümüzdeki
+        // ~14 gün içindeki bekleyen (henüz oynanmamış) satırlar toplanıp tek listede gösterilir.
+        var activeSeason = await _context.Seasons.AsNoTracking()
+            .FirstOrDefaultAsync(s => s.SeasonName == LeagueCatalog.ActiveSeasonName);
+        if (activeSeason != null)
+        {
+            var cutoff = DateTime.UtcNow.AddDays(14);
+            var crossLeague = new List<Bilgi1RowDto>();
+            foreach (var lg in vm.Leagues)
+            {
+                var r = lg.Id == leagueId.Value && seasonId == activeSeason.Id
+                    ? result // aynı lig+sezon zaten tarandıysa tekrar tarama
+                    : await ScanLeagueAsync(lg.Id, activeSeason.Id);
+
+                foreach (var row in r.PendingRows)
+                {
+                    if (row.KickoffUtc.HasValue && row.KickoffUtc.Value <= cutoff)
+                    {
+                        row.LeagueName = lg.Name;
+                        crossLeague.Add(row);
+                    }
+                }
+            }
+            vm.CrossLeaguePending = crossLeague.OrderBy(r => r.KickoffUtc ?? DateTime.MaxValue).ToList();
+        }
+
+        return View(vm);
+    }
+
+    /// <summary>Tek bir lig+sezon (veya tüm sezonlar, seasonId=null) için BİLGİ 1 taramasını
+    /// çalıştırır. Hem seçili-lig detay ekranı hem tüm-liglerde-bekleyenler digest'i bunu kullanır.</summary>
+    private async Task<ScanResult> ScanLeagueAsync(int leagueId, int? seasonId)
+    {
         var mq = _context.Matches.AsNoTracking()
             .Include(m => m.HomeTeam).Include(m => m.AwayTeam).Include(m => m.Surprise).Include(m => m.Season)
-            .Where(m => m.LeagueId == leagueId.Value);
+            .Where(m => m.LeagueId == leagueId);
         if (seasonId.HasValue) mq = mq.Where(m => m.SeasonId == seasonId.Value);
         var played = await mq.Select(m => new Fx(
             m.SeasonId, m.Season.SeasonName, m.Week, m.HomeTeamId, m.AwayTeamId,
@@ -72,10 +120,9 @@ public class Bilgi1Controller : Controller
             m.Surprise != null ? m.Surprise.IyMsCode : "-",
             m.MatchDate, (DateTime?)null)).ToListAsync();
 
-        // --- Fikstür takvimi (oynanmamış dahil) ---
         var fq = _context.FixtureSchedules.AsNoTracking()
             .Include(f => f.HomeTeam).Include(f => f.AwayTeam).Include(f => f.Season)
-            .Where(f => f.LeagueId == leagueId.Value);
+            .Where(f => f.LeagueId == leagueId);
         if (seasonId.HasValue) fq = fq.Where(f => f.SeasonId == seasonId.Value);
         var sched = await fq.Select(f => new
         {
@@ -96,7 +143,10 @@ public class Bilgi1Controller : Controller
                 s.HomeName, s.AwayName, false, false, "", "", "-", s.KickoffUtc, s.KickoffUtc));
         }
 
-        // --- Sezon sezon BİLGİ 1 taraması ---
+        var rows = new List<Bilgi1RowDto>();
+        var pendingRows = new List<Bilgi1RowDto>();
+        int eligiblePivotCount = 0, eligibleTurnaroundCount = 0, bilgi1Count = 0, bilgi1TurnaroundCount = 0;
+
         foreach (var g in fixtures.GroupBy(r => r.SeasonId))
         {
             var seasonRows = g.ToList();
@@ -150,8 +200,8 @@ public class Bilgi1Controller : Controller
 
                 if (p.Played)
                 {
-                    vm.EligiblePivotCount++;
-                    if (p.Turn) vm.EligibleTurnaroundCount++;
+                    eligiblePivotCount++;
+                    if (p.Turn) eligibleTurnaroundCount++;
                 }
 
                 var pairKey = (Math.Min(x.Value, y.Value), Math.Max(x.Value, y.Value));
@@ -182,27 +232,27 @@ public class Bilgi1Controller : Controller
 
                 if (p.Played)
                 {
-                    vm.Bilgi1Count++;
-                    if (p.Turn) vm.Bilgi1TurnaroundCount++;
-                    vm.Rows.Add(row);
+                    bilgi1Count++;
+                    if (p.Turn) bilgi1TurnaroundCount++;
+                    rows.Add(row);
                 }
                 else
                 {
-                    vm.PendingRows.Add(row);
+                    pendingRows.Add(row);
                 }
             }
         }
 
-        vm.Rows = vm.Rows
+        rows = rows
             .OrderByDescending(r => r.SeasonName)
             .ThenBy(r => r.Week)
             .ThenBy(r => r.MatchDate)
             .ToList();
-        vm.PendingRows = vm.PendingRows
+        pendingRows = pendingRows
             .OrderBy(r => r.KickoffUtc ?? DateTime.MaxValue)
             .ThenBy(r => r.Week)
             .ToList();
 
-        return View(vm);
+        return new ScanResult(rows, pendingRows, eligiblePivotCount, eligibleTurnaroundCount, bilgi1Count, bilgi1TurnaroundCount);
     }
 }

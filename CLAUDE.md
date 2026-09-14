@@ -282,6 +282,19 @@ aktif sezon) üzerinden tarar; deseni tutan ama henüz oynanmamış pivot maçla
 sayfanın üstünde **"🔮 Bekleyen Tahminler"** olarak listelenir — "Senkronize Et"
 sonrası oynanan maç otomatik olarak gerçek sonucuyla alttaki (çözülmüş) tabloya geçer.
 
+**"🌍 Tüm Liglerde Bekleyen" (CrossLeaguePending)** — sayfanın en üstünde, seçili
+ligden BAĞIMSIZ bir kutu: aktif sezonun TÜM liglerini tarayıp önümüzdeki ~14 gün
+içinde kickoff'u olan bekleyen desenleri tek listede gösterir (lig adı sütunuyla).
+Kullanıcı talebiyle eklendi — varsayılan lig (Premier Lig) açıkken başka bir ligde
+(örn. Süper Lig) desen tutan bir maç fark edilmeden geçebiliyordu. Controller'daki
+tarama mantığı `ScanLeagueAsync(leagueId, seasonId)` private metoduna çıkarıldı —
+hem seçili-lig detay taraması hem bu digest AYNI metodu çağırır (kod tekrarı yok);
+digest için tüm liglere `LeagueCatalog.ActiveSeasonName`'in Season.Id'si verilir
+(zaten seçili lig+sezon aynıysa tekrar taramaz, mevcut sonucu kullanır). Yeni bir
+"BİLGİ N" deseni eklenirse aynı digest deseni (üstte, tüm ligler, 14 günlük kesim)
+uygulanmalı — kullanıcının varsayılan olarak sadece bir ligi görmesi riski her
+zaman geçerli.
+
 - **BİLGİ 4**: pivot maç A–B (hafta N). A'nın **N-1 & N-2**'deki rakip ikilisi,
   B'nin **N+1 & N+2**'deki rakip ikilisiyle aynıysa (yön serbest) desen tutar.
   Sıra/ev-deplasman önemsiz.
@@ -294,6 +307,47 @@ sonrası oynanan maç otomatik olarak gerçek sonucuyla alttaki (çözülmüş) 
   fark gürültü sınırında. Yeni "BİLGİ N" fikstür deseni istenirse bu ikisi şablon
   alınabilir ama **öngörü gücü olduğunu varsayma — her seferinde taban oranla
   (aynı koşullar altındaki tüm maçların dönüş oranıyla) kıyaslayıp doğrula.**
+
+## Lig Fikstür — hafta-içi (round bazlı) desen (Controllers/LigFiksturController.cs)
+
+BİLGİ 1/4'ten kategorik olarak farklı: onlar bir takımın kendi **ardışık haftalarına**
+bakar, bu ise **aynı haftanın (round'un) FARKLI maçlarına** bakar — "sırayla değil
+birbiri arasında" (kullanıcının tanımı). Kalıcı tablo yok, anlık hesaplanır. Varsayılan
+**tüm ligler + tüm sezonlar birleşik** taranır; `leagueId`/`seasonId` query param'larıyla
+(BİLGİ 1/4'teki gibi dropdown filtreler) daraltılabilir — lig seçilince sezon dropdown'ı
+o lige göre daralır (BİLGİ 1/4 ile aynı desen). Filtre boşken bile lig bazlı kırılım
+tablosu zaten "hangi ligde ne kadar" sorusunu cevaplıyor; dropdown'lar tek bir lig/sezonun
+DETAY tablosuna (round-round dökümüne) odaklanmak içindir.
+
+- **Tetikleyici**: bir round'da (LeagueId+SeasonId+Week) en az bir maç tam skoru
+  **2-2** bitmiş, VE aynı round'da (farklı bir maçta) zaten en az bir **sürpriz**
+  (`MatchSurprise.SurpriseType != "NONE"` — dönüş veya +6 gol, ikisi ayrımsız) var.
+- **İsabet ("hit") — ÇEŞİT ÖNEMLİ (kullanıcı düzeltmesi)**: sadece "≥2 sürpriz" yeterli
+  DEĞİL — iki sürpriz **FARKLI ÇEŞİTTEN** olmalı. +6 gol + 2-2 varsa isabet için ayrı bir
+  maçta **DÖNÜŞ** olmalı; dönüş + 2-2 varsa isabet için ayrı bir maçta **+6 gol** olmalı.
+  Aynı çeşitten iki sürpriz (örn. iki ayrı +6'lı maç, hiç dönüş yokken) İSABET SAYILMAZ —
+  ilk sürümde bu ayrım yoktu, gerçek bir örnekle (Almanya Bundesliga 16. hafta: 2-2 + iki
+  ayrı +6'lı maç, dönüş yok) yanlış İSABET veriyordu, düzeltildi. Kod: `goalIdx`/`turnIdx`
+  (HIGH_GOAL/DOUBLE_SURPRISE → goal, TURNAROUND/DOUBLE_SURPRISE → turn), isHit = ikisi de
+  dolu VE tek bir ÇİFTE SÜRPRİZ maçının kendi kendini kanıtlamadığından emin ol (`!(goalIdx.
+  Count==1 && turnIdx.Count==1 && goalIdx[0]==turnIdx[0])`).
+- **Taban oranı**: TÜM tamamlanmış round'ların (2-2 şartı OLMADAN) kaçında zaten hem
+  +6-çeşidi hem dönüş-çeşidi sürpriz (farklı maçlarda) birlikte var — bununla kıyaslanır
+  (aynı disiplin: BİLGİ 1/4'teki "taban oranla doğrula" kuralı burada da geçerli).
+- **Round'un "tamamlanmış" sayılması**: `FixtureSchedule`'da o round için kayıtlı
+  maç sayısı, `Matches`'teki oynanmış sayıdan fazlaysa round **devam ediyor**
+  sayılır — istatistiklere (taban/oran) KARIŞMAZ, bunun yerine tetikleyici zaten
+  oluşmuşsa "🔮 Şu An Tetiklenmiş" canlı bölümüne düşer (o round'un henüz
+  oynanmamış maçları "aday" olarak listelenir). `FixtureSchedule` verisi olmayan
+  (eski/senkronize edilmemiş) sezonlarda round her zaman tamamlanmış sayılır.
+- **Bulgu (çeşit-düzeltmesi sonrası, tüm ligler 2020-2026)**: taban ~%17,5 (rastgele
+  bir haftada hem +6 hem dönüş çeşidi birlikte bulunma ihtimali), tetikleyici
+  oluştuğunda ~%25,9 — **fark +~8,4 puan, hâlâ pozitif bir sinyal ama düzeltme
+  öncesi görünenden (+~13 puan) daha mütevazı** (çeşit ayrımı yapılmayan ilk
+  sürüm oranı şişiriyordu). Lig bazlı kırılımda hangi liglerin daha güçlü sinyal
+  verdiği sayfadaki tabloda görünür. Yine de: **bu bulgu kalıcı doğru kabul
+  edilmemeli** — zaman içinde daha fazla veri birikince tekrar kontrol edilmeli
+  (BİLGİ 1/4 de başta umut verici görünüp sonra taban oranın içinde eridi).
 
 ## Gol Beklentisi — tek gerçek öngörü sinyali (Controllers/GolBeklentisiController.cs)
 

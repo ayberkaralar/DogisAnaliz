@@ -53,6 +53,11 @@
     .tag-turn { display:inline-block; background:#ea580c; color:#fff; padding:3px 9px; border-radius:999px; font-size:.72rem; font-weight:800; letter-spacing:.03em; }
     .tag-dash { color:#3f4b60; }
     .empty { text-align:center; color:#64748b; padding:26px 0; }
+
+    .cross-box { background:#1c1033; border:1px solid #4c1d95; border-radius:14px; padding:16px 18px; margin-bottom:22px; }
+    .cross-box .season-hd { border-bottom-color:#a78bfa; }
+    .cross-box .yr { color:#c4b5fd !important; }
+    .cross-lig { display:inline-block; background:#312e81; color:#c7d2fe; padding:2px 9px; border-radius:999px; font-size:.72rem; font-weight:700; }
 </style>
 
 <div class="b1">
@@ -72,6 +77,40 @@
         Man Utd ile Southampton 21. haftada <b>2/1</b> (dönüş) oynamıştı → desen tuttu.<br>
         <b>İzlenen çıktı:</b> pivot maç DÖNÜŞ oldu mu? (+6 gol bu analize dahil değil.)
     </div>
+
+    @if (Model.CrossLeaguePending.Count > 0)
+    {
+        <div class="cross-box">
+            <div class="season-hd" style="border-bottom-color:#a78bfa; margin-bottom:10px;">
+                <span class="yr" style="color:#c4b5fd;">🌍 Tüm Liglerde Bekleyen — Önümüzdeki ~2 Hafta</span>
+                <span class="meta">seçtiğin ligden BAĞIMSIZ, aktif sezonda desen tutan @Model.CrossLeaguePending.Count maç — kaçırma</span>
+            </div>
+            <table class="grid">
+                <thead>
+                    <tr>
+                        <th>Lig</th><th>Hf</th><th>Tarih (TSİ)</th><th>Pivot Maç (A – B)</th>
+                        <th>Tetikleyici: bir önceki hafta rakipleri → aralarındaki dönüş maçı</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var r in Model.CrossLeaguePending)
+                    {
+                        <tr>
+                            <td><span class="cross-lig">@LeagueDisplayHelper.ToTurkish(r.LeagueName)</span></td>
+                            <td class="wk">@r.Week</td>
+                            <td class="mono" style="color:#cbd5e1;">@(r.KickoffTr?.ToString("dd.MM.yyyy HH:mm") ?? "-")</td>
+                            <td class="pivot">@r.TeamA<span class="vs">–</span>@r.TeamB</td>
+                            <td class="trig">
+                                <span class="pair">@r.OppX &amp; @r.OppY</span>
+                                <span class="arrow">→</span>
+                                <span>@($"H{r.TriggerWeek}")</span> <span class="res">@r.TriggerIyMs</span> (@r.TriggerFt)
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
 
     @if (Model.Leagues.Count == 0)
     {

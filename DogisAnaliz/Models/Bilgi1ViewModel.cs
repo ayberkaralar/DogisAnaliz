@@ -31,6 +31,12 @@ public class Bilgi1ViewModel
 
     /// <summary>Deseni tutan ama henüz OYNANMAMIŞ pivot maçlar (fikstür takviminden — tahmin).</summary>
     public List<Bilgi1RowDto> PendingRows { get; set; } = new();
+
+    /// <summary>Seçili ligden BAĞIMSIZ — TÜM liglerde, önümüzdeki ~2 hafta içinde oynanacak,
+    /// deseni tutan bekleyen maçlar. Kullanıcı varsayılan ligde değilse (örn. Premier Lig'de
+    /// dururken Süper Lig'de desen tutan bir maç varsa) kaçırmasın diye sayfanın en üstünde
+    /// gösterilir — bkz. CLAUDE.md "BİLGİ 1/4 — tüm liglerde bekleyen tahminler".</summary>
+    public List<Bilgi1RowDto> CrossLeaguePending { get; set; } = new();
 }
 
 public class Bilgi1LeagueDto
@@ -64,4 +70,7 @@ public class Bilgi1RowDto
     public bool IsPending { get; set; }
     public DateTime? KickoffUtc { get; set; }
     public DateTime? KickoffTr => KickoffUtc?.AddHours(3);
+
+    /// <summary>Sadece CrossLeaguePending listesinde doldurulur — hangi ligden geldiğini gösterir.</summary>
+    public string LeagueName { get; set; } = string.Empty;
 }
