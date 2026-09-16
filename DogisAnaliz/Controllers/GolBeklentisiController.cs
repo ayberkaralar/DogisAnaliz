@@ -16,24 +16,12 @@ public class GolBeklentisiController : Controller
 
     public GolBeklentisiController(AppDbContext context) => _context = context;
 
-    // Birleşik gol beklentisi -> kova etiketi
-    private static string Bucket(double combined) => combined switch
-    {
-        < 5.0 => "< 5,0",
-        < 5.4 => "5,0 – 5,4",
-        < 5.8 => "5,4 – 5,8",
-        < 6.2 => "5,8 – 6,2",
-        _     => "≥ 6,2",
-    };
-    private static readonly string[] BucketOrder = { "< 5,0", "5,0 – 5,4", "5,4 – 5,8", "5,8 – 6,2", "≥ 6,2" };
-
-    private static double H2hWeight(int n) => Math.Min(0.5, 0.09 * n);
+    // Çekirdek formül (Bucket/Combine/H2hWeight) artık Services/GoalExpectationCalculator.cs'te —
+    // OzetController ile AYNI hesabı kullanmak için oraya taşındı (bkz. o dosyanın XML yorumu).
+    private static string Bucket(double combined) => GoalExpectationCalculator.Bucket(combined);
+    private static readonly string[] BucketOrder = GoalExpectationCalculator.BucketOrder;
     private static double Combine(double teamPart, double h2hAvg, int h2hN)
-    {
-        if (h2hN < 3) return teamPart;
-        double w = H2hWeight(h2hN);
-        return w * (2.0 * h2hAvg) + (1 - w) * teamPart;
-    }
+        => GoalExpectationCalculator.Combine(teamPart, h2hAvg, h2hN);
 
     public async Task<IActionResult> Index(int? leagueId, int? seasonId, DateTime? date, int? teamId)
     {

@@ -87,6 +87,8 @@
                 <thead>
                     <tr>
                         <th>Lig</th><th>Hf</th><th>Tarih (TSİ)</th><th>Pivot Maç (A – B)</th><th>Ortak İki Rakip</th>
+                        <th>Ligin genel dönüş oranı</th>
+                        <th>Bunların dönüş oranı</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -98,6 +100,15 @@
                             <td class="mono" style="color:#cbd5e1;">@(r.KickoffTr?.ToString("dd.MM.yyyy HH:mm") ?? "-")</td>
                             <td class="pivot">@r.TeamA<span class="vs">–</span>@r.TeamB</td>
                             <td class="shared">@r.SharedOpp1<span class="plus">+</span>@r.SharedOpp2</td>
+                            <td class="mono" style="color:#94a3b8;">%@r.LeagueBaseTurnaroundRate <span style="color:#64748b; font-size:.72rem;">(n=@r.LeagueEligiblePivotCount)</span></td>
+                            @if (r.LeaguePatternCount == 0)
+                            {
+                                <td class="mono" style="color:#64748b;" title="Bu sezon bu ligde henüz desenin tuttuğu ve oynanmış bir maç yok">veri yok</td>
+                            }
+                            else
+                            {
+                                <td class="mono" style="color:@(r.LeaguePatternTurnaroundRate > r.LeagueBaseTurnaroundRate + 3 ? "#4ade80" : r.LeaguePatternTurnaroundRate < r.LeagueBaseTurnaroundRate - 3 ? "#f87171" : "#fb923c");">%@r.LeaguePatternTurnaroundRate <span style="color:#64748b; font-size:.72rem;">(n=@r.LeaguePatternCount)</span></td>
+                            }
                         </tr>
                     }
                 </tbody>

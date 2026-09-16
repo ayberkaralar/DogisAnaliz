@@ -11,6 +11,9 @@ namespace DogisAnaliz.Controllers;
 /// kalıcı tablo yok (bkz. CLAUDE.md "Yeni bir analiz eklerken izlenecek yol" notu — BİLGİ 1/4 ile
 /// aynı kategori). Tüm ligleri tek seferde tarar (kullanıcı talebiyle — lig bazlı kırılım gerekiyor).
 /// Tanım ve tetikleyici/hedef mantığı için bkz. <see cref="LigFiksturViewModel"/>.
+///
+/// Hesaplama mantığı <see cref="BuildAsync"/>'te STATIC — bkz. Bilgi1Controller'daki aynı not,
+/// <c>OzetController</c> (Ana Sayfa özeti) <c>vm.LivePending</c>'i tekrar yazmadan buradan alır.
 /// </summary>
 public class LigFiksturController : Controller
 {
@@ -23,27 +26,33 @@ public class LigFiksturController : Controller
         string HomeName, string AwayName);
 
     public async Task<IActionResult> Index(int? leagueId, int? seasonId)
+        => View(await BuildAsync(_context, leagueId, seasonId));
+
+    /// <summary>LigFiksturController.Index'in tüm hesaplama mantığı — bkz. Bilgi1Controller.BuildAsync.
+    /// leagueId/seasonId=null verilirse TÜM ligler/sezonlar birleşik taranır (varsayılan; Özet
+    /// sayfası bunu hep null ile çağırır).</summary>
+    internal static async Task<LigFiksturViewModel> BuildAsync(AppDbContext context, int? leagueId, int? seasonId)
     {
         var vm = new LigFiksturViewModel { SelectedLeagueId = leagueId, SelectedSeasonId = seasonId };
 
         // --- Filtre dropdown'ları: TÜM ligler / TÜM sezonlar (boş bırakılırsa hepsi birleşik
         // taranır — varsayılan). Lig seçilince sezon listesi o lige daralır. ---
-        var leagueCounts = await _context.Matches.AsNoTracking()
+        var leagueCounts = await context.Matches.AsNoTracking()
             .GroupBy(m => m.LeagueId).Select(g => g.Key).ToListAsync();
-        vm.Leagues = (await _context.Leagues.AsNoTracking()
+        vm.Leagues = (await context.Leagues.AsNoTracking()
                 .Where(l => leagueCounts.Contains(l.Id)).ToListAsync())
             .Select(l => new LigFiksturLeagueDto { Id = l.Id, Name = l.Name, Country = l.Country })
             .OrderBy(l => LeagueDisplayHelper.ToTurkish(l.Name, l.Country))
             .ToList();
 
-        var seasonIdsQuery = _context.Matches.AsNoTracking().AsQueryable();
+        var seasonIdsQuery = context.Matches.AsNoTracking().AsQueryable();
         if (leagueId.HasValue) seasonIdsQuery = seasonIdsQuery.Where(m => m.LeagueId == leagueId.Value);
         var seasonIds = await seasonIdsQuery.Select(m => m.SeasonId).Distinct().ToListAsync();
-        vm.Seasons = await _context.Seasons.AsNoTracking()
+        vm.Seasons = await context.Seasons.AsNoTracking()
             .Where(s => seasonIds.Contains(s.Id)).OrderByDescending(s => s.StartYear).ToListAsync();
 
         // --- Oynanmış maçlar — seçili lig/sezon filtresiyle (boşsa tüm ligler/sezonlar). ---
-        var mq = _context.Matches.AsNoTracking().AsQueryable();
+        var mq = context.Matches.AsNoTracking().AsQueryable();
         if (leagueId.HasValue) mq = mq.Where(m => m.LeagueId == leagueId.Value);
         if (seasonId.HasValue) mq = mq.Where(m => m.SeasonId == seasonId.Value);
         var all = await mq
@@ -54,12 +63,12 @@ public class LigFiksturController : Controller
                 m.MatchDate, m.HomeTeam.Name, m.AwayTeam.Name))
             .ToListAsync();
 
-        if (all.Count == 0) return View(vm);
+        if (all.Count == 0) return vm;
 
         // --- Fikstür takvimindeki round başına toplam maç sayısı — "bu round hâlâ devam ediyor
         // mu" (bazı maçları henüz oynanmadı) tespiti için. Sadece aktif sezon/senkronize edilmiş
         // ligler için veri var; olmayan (eski) sezonlarda round zaten "tamamlanmış" sayılır. ---
-        var scheduleCounts = await _context.FixtureSchedules.AsNoTracking()
+        var scheduleCounts = await context.FixtureSchedules.AsNoTracking()
             .GroupBy(f => new { f.LeagueId, f.SeasonId, f.Week })
             .Select(g => new { g.Key.LeagueId, g.Key.SeasonId, g.Key.Week, Count = g.Count() })
             .ToDictionaryAsync(x => (x.LeagueId, x.SeasonId, x.Week), x => x.Count);
@@ -171,7 +180,7 @@ public class LigFiksturController : Controller
                     .Select(m => (m.HomeName, m.AwayName)) // isimle eşleştirmek yeterli (aynı round içinde)
                     .ToHashSet();
 
-                var fx = await _context.FixtureSchedules.AsNoTracking()
+                var fx = await context.FixtureSchedules.AsNoTracking()
                     .Include(f => f.HomeTeam).Include(f => f.AwayTeam)
                     .Where(f => f.LeagueId == r.LeagueId && f.SeasonId == r.SeasonId && f.Week == r.Week)
                     .Select(f => new { f.HomeTeam.Name, AwayName = f.AwayTeam.Name, f.KickoffUtc })
@@ -203,6 +212,6 @@ public class LigFiksturController : Controller
             vm.LivePending = vm.LivePending.OrderBy(r => r.Candidates.Min(c => c.KickoffUtc)).ToList();
         }
 
-        return View(vm);
+        return vm;
     }
 }

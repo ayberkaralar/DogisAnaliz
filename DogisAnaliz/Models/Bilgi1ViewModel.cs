@@ -73,4 +73,14 @@ public class Bilgi1RowDto
 
     /// <summary>Sadece CrossLeaguePending listesinde doldurulur — hangi ligden geldiğini gösterir.</summary>
     public string LeagueName { get; set; } = string.Empty;
+
+    /// <summary>Sadece CrossLeaguePending listesinde doldurulur — bu satırın geldiği ligin genel
+    /// (taban) dönüş oranı %, o ligin kendi EligiblePivotCount/EligibleTurnaroundCount'undan.</summary>
+    public double LeagueBaseTurnaroundRate { get; set; }
+    public int LeagueEligiblePivotCount { get; set; }
+
+    /// <summary>Sadece CrossLeaguePending listesinde doldurulur — bu satırın geldiği ligde BİLGİ 1
+    /// DESENİNİN TUTTUĞU maçların dönüş oranı % ("Bunların dönüş oranı" — taban değil, koşullu).</summary>
+    public double LeaguePatternTurnaroundRate { get; set; }
+    public int LeaguePatternCount { get; set; }
 }

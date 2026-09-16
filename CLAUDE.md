@@ -290,8 +290,25 @@ Kullanıcı talebiyle eklendi — varsayılan lig (Premier Lig) açıkken başka
 tarama mantığı `ScanLeagueAsync(leagueId, seasonId)` private metoduna çıkarıldı —
 hem seçili-lig detay taraması hem bu digest AYNI metodu çağırır (kod tekrarı yok);
 digest için tüm liglere `LeagueCatalog.ActiveSeasonName`'in Season.Id'si verilir
-(zaten seçili lig+sezon aynıysa tekrar taramaz, mevcut sonucu kullanır). Yeni bir
-"BİLGİ N" deseni eklenirse aynı digest deseni (üstte, tüm ligler, 14 günlük kesim)
+(zaten seçili lig+sezon aynıysa tekrar taramaz, mevcut sonucu kullanır). Her satırda
+ayrıca 2 kıyas sütunu var:
+- **"Ligin genel dönüş oranı"** (`LeagueBaseTurnaroundRate`/`LeagueEligiblePivotCount`) —
+  o ligde rastgele bir maça bakılsa dönüş çıkma ihtimali (taban).
+- **"Bunların dönüş oranı"** (`LeaguePatternTurnaroundRate`/`LeaguePatternCount`) —
+  o ligde BİLGİ 1/4 DESENİNİN TUTTUĞU (ve oynanmış) maçların dönüş oranı (koşullu).
+
+İkisi kıyaslanınca desenin o ligde gerçekten bir şey söyleyip söylemediği görülür
+(bkz. kullanıcı sorusu: "ligin genel dönüş oranıyla bunların dönüş oranı arasındaki
+fark nedir" — taban vs koşullu oran, aynı BİLGİ 1/4 sayfasındaki `RateDiff` mantığı,
+sadece burada HER LİG için ayrı ayrı). **Önemli:** bu 2 oran `ScanLeagueAsync(lg.Id,
+null)` ile **TÜM SEZONLAR** birleşik hesaplanır — `PendingRows` (hangi maçın yakın
+vadede oynanacağı) hâlâ sadece aktif sezondan gelir, ama ORANLAR aktif sezonla
+sınırlı tutulursa (sezon daha birkaç hafta ilerlediyse) n neredeyse hep 0 çıkar,
+anlamsız olur; bu yüzden sadece gösterilecek satırı olan ligler için (performans
+için) ek bir "tüm sezonlar" taraması yapılır. `LeaguePatternCount == 0` ise (yeni
+eklenen bir ligde BİLGİ deseni hiç tutmamışsa) view "veri yok" gösterir, "%0" DEĞİL
+— aksi halde "0 örnek" ile "gerçekten %0 oran" karışır. Yeni bir "BİLGİ N" deseni
+eklenirse aynı digest deseni (üstte, tüm ligler, 14 günlük kesim)
 uygulanmalı — kullanıcının varsayılan olarak sadece bir ligi görmesi riski her
 zaman geçerli.
 
@@ -372,6 +389,107 @@ için), **monoton ve her ligde tutarlı.** Sayfada:
 Yeni bir "gerçek sinyal" araştırırken bu dosyadaki **yürüyen kalibrasyon** desenini
 örnek al: `career`/`recent` (Queue, son N) / `h2h` sözlüklerini kronolojik sırayla
 güncelleyip her maçı **kendinden önceki** veriyle değerlendir — lookahead'e düşme.
+
+## Özet — ilk açılış sayfası (Controllers/OzetController.cs)
+
+Uygulamanın varsayılan rotası (`Program.cs`, `{controller=Ozet}`) ve navbar'daki "⚡ Ana
+Sayfa" linki artık buraya işaret ediyor — kullanıcı talebiyle, eski `HomeController`
+("Sürpriz/Fikstür/Puan Durumu") **kaldırılmadı**, sadece navbar'da "🎯 Sürpriz / Fikstür"
+adıyla ayrı bir sekmeye taşındı. Amaç: 5 analizin (BİLGİ 1, BİLGİ 4, DOGİ, GOL BEKLENTİSİ,
+LİG FİKSTÜR) önümüzdeki ~14 gün içindeki bekleyen/takip edilmesi gereken maçlarını **tek,
+göz yormayan bir listede** birleştirmek — aynı maç birden fazla analizden gelirse TEK
+satırda, birden fazla renkli rozetle gösterilir (`(LeagueName, HomeTeam, AwayTeam)`
+anahtarıyla birleştirilir, bkz. `OzetController.GetOrAdd`). **Gol Beklentisi bu birleşik
+listeye dahil DEĞİL** — kullanıcı talebiyle ayrı tutulur, bkz. aşağı.
+
+**Kalıcı tablo yok** — `OzetController.Index()` her istek geldiğinde anlık hesaplar.
+Kod tekrarını önlemek için kendi mantığını yazmak yerine üç mevcut controller'ın TÜM
+hesaplamasını çağırır:
+- `Bilgi1Controller.BuildAsync(context, null, null)` → `CrossLeaguePending`
+- `Bilgi4Controller.BuildAsync(context, null, null)` → `CrossLeaguePending`
+- `LigFiksturController.BuildAsync(context, null, null)` → `LivePending`
+
+Bu üçü yüzünden Bilgi1Controller/Bilgi4Controller/LigFiksturController'ın eski `Index()`
+gövdeleri **`internal static async Task<TViewModel> BuildAsync(AppDbContext context,
+int? leagueId, int? seasonId)`** metoduna taşındı; her controller'ın kendi `Index()`
+action'ı artık sadece `View(await BuildAsync(_context, leagueId, seasonId))` çağırıyor.
+`internal` görünürlük aynı assembly içindeki başka bir controller'ın DI/servis kaydı
+gerekmeden doğrudan çağırabilmesi için yeterli — **yeni bir sayfa başka bir controller'ın
+tam hesaplamasını yeniden kullanmak isterse bu deseni örnek al** (yeni bir servis
+katmanına taşımaya gerek yok, `internal static BuildAsync` yeterli).
+
+**DOGİ için özel, salt-okunur bir çapraz-referans var**: `DogiPattern.AlertMatchId`,
+`AlertResult=="PENDING"` iken hep `null` kalır çünkü `DogiService.UpdatePendingPatternsAsync`
+sadece oynanmış `Matches`'e bakar, `FixtureSchedule`'a hiç bakmaz (bkz. yukarı "DogiPattern"
+bölümü) — yani Dogi'nin kendi sayfası pending bir pattern için "3. maç ne zaman/kime karşı"
+bilgisini gösteremez. Bu SADECE Özet sayfası için `OzetController.Index()` içinde,
+`FixtureSchedule`'da o takımın (`TeamId`, tetikleyici 2. maçtan sonraki) bir sonraki
+maçını arayarak çözülüyor — **`DogiService`/`DogiPattern`'ın kendi semantiği
+değiştirilmedi**, bu tamamen ek/read-only bir eşleştirme.
+
+**Gol Beklentisi için — kullanıcı talebiyle DİĞER 4 analizden AYRI tutulur**: BİLGİ 1/4,
+DOGİ ve LİG FİKSTÜR aynı `byKey` sözlüğünde birleşip TEK bir listede (`vm.Matches`)
+rozetlenirken, Gol Beklentisi'nin bulguları bu birleşik listeye hiç KARIŞTIRILMAZ —
+kendi bağımsız `byKey`'inde toplanıp ayrı bir listeye yazılır (`vm.GolBeklentisiMatches`,
+`OzetController.BuildGoalExpectationMatchesAsync`) ve view'da ayrı, görsel olarak
+ayrılmış (kesikli çizgiyle bölünmüş) bir bölümde gösterilir. Sebep: Gol Beklentisi
+diğerlerinden kategorik olarak farklı bir sinyal (dönüş/desen değil, gol sayısı tahmini)
+— aynı listeye karışınca "hangi analiz" ayrımı bulanıklaşıyordu. `GolBeklentisiController`'ın
+tam pencere/kalibrasyon hesaplaması burada TEKRARLANMAZ — sadece "combined skor üst 2
+kovaya mı düşüyor" sorusu için hafif bir career/recent/h2h hesaplaması yapılır
+(`OzetController.AddGoalExpectationTagsAsync`), ortak formül
+`Services/GoalExpectationCalculator.cs`'den (`Bucket`/`Combine`/`H2hWeight`) gelir — bu
+dosya, `GolBeklentisiController`'ın kendi private implementasyonundan bu sayfa için
+ayıklandı (ikisi arasında formül sapması olmaması için `GolBeklentisiController` artık
+kendi `Bucket`/`Combine` metotlarını buraya delege eden ince wrapper'lar). Görünümde her
+kart için tam açıklama (`OzetTagDto.Detail`) tooltip'te, kısa gösterim
+(`OzetTagDto.Short`, örn. `"7,00 · "≥ 6,2""`) kartın üzerinde — tam cümleyi karta
+basmak "göz yormayacak" hedefini bozuyordu, düzeltildi.
+
+**Seçicilik (kullanıcı düzeltmesi — "çok fazla maç çıkıyor")**: ilk sürüm üst 2 kovayı
+("5,8 – 6,2" + "≥ 6,2") işaretliyordu; gerçek kalibrasyon verisiyle (`/GolBeklentisi`
+sayfasının Kalibrasyon tablosu) kontrol edilince bunun **tüm maçların ~%37,5'i**
+olduğu görüldü — pratikte elemiyor. Tarihsel oranlar: "5,8–6,2" kovası 6+ gol'de
+sadece **%8** (taban ortalama ~%6,6'ya çok yakın, gürültü sınırında), "≥ 6,2" kovası
+ise **%9,2** (en yüksek ve en tutarlı). Düzeltme: `AddGoalExpectationTagsAsync` artık
+**SADECE `"≥ 6,2"` kovasını** işaretliyor (`bucket != "≥ 6,2"` ise atla) — bu tek
+başına oranı ~%17'ye indiriyor. Ayrıca bir tutarsızlık bulundu ve düzeltildi:
+`GolBeklentisiController`'ın kendi kalibrasyon eğrisi takım başına **en az 8 maç**
+şartıyla hesaplanmış (`eligible = cH.n >= 8 && cA.n >= 8`, satır ~170), ama
+`OzetController`'daki `FinalBlended`'ın "az veri" eşiği 6'ydı — yani kalibrasyonun
+hiç test etmediği (6-7 maçlık) takımlar da "yüksek kova" sayılıp işaretleniyordu.
+Artık `FinalBlended`'daki `low = c.n < 8` ile kalibrasyonla TUTARLI. **Gol Beklentisi
+sayfasının kendi mantığı (n>=6 eşiği, üst 2 kova gösterimi vb.) DEĞİŞTİRİLMEDİ** — bu
+sıkılaştırma sadece Özet'in kendi filtresi, ayrı bir "sürpriz avı" seçiciliği. Yeni bir
+eşik/kova değişikliği düşünülürse önce gerçek kalibrasyon tablosundan (`/GolBeklentisi`)
+sayıları doğrula — varsayımla ("muhtemelen ayırt edici" gibi) karar verme.
+
+**Senkronizasyon kararı**: sayfa açılışında OTOMATİK senkronizasyon tetiklenmiyor (DB'yi
+her sayfa yüklemesinde 15-30 saniyelik bir API taramasına zorlamamak için) — bunun yerine
+sayfanın en üstünde diğer ekranlardaki gibi manuel **"🔄 Senkronize Et"** butonu var
+(`POST /Sync/RefreshAllActive`, aynı endpoint). Kullanıcı "orası sana kalmış" demişti;
+bu proje zaten arka planda `ActiveSeasonSyncService` ile açılıştan ~8 sn sonra bir kez
+otomatik senkron yapıyor (bkz. yukarı), o yüzden Özet sayfasının kendi başına ayrıca
+zorunlu bir senkron tetiklemesi gereksiz maliyet olurdu.
+
+Görünüm (`Views/Ozet/Index.cshtml`) günlere göre gruplu, kompakt kart listesi — her
+kartta saat/lig rozeti/maç adı + sağda renkli, `title` (tooltip) ile detaylı kaynak
+rozetleri (`OzetTagDto.Color`: BİLGİ 1 `#7dd3fc`, BİLGİ 4 `#c4b5fd`, DOGİ `#fbbf24`,
+GOL BEKLENTİSİ `#38bdf8`, LİG FİKSTÜR `#f472b6`). Yeni bir analiz eklenirse aynı deseni
+izle: `OzetController.Index()`'e yeni bir `--- ANALİZ ADI ---` bloğu + `OzetTagDto` için
+yeni bir renk seç + `OzetViewModel`'e yeni bir sayaç alanı ekle.
+
+**BİLGİ 1 / BİLGİ 4 rozetlerinde "Bunların dönüş oranı"** — kullanıcı talebiyle rozetin
+üzerinde (`OzetTagDto.Short`, örn. `"BİLGİ 1 · %7,9 (n=126)"`) ve tooltip'te
+(`OzetTagDto.Detail`) gösterilir. Bu oran BURADA YENİDEN HESAPLANMAZ —
+`Bilgi1Controller`/`Bilgi4Controller`'ın `BuildAsync`'i zaten `CrossLeaguePending`
+satırlarına `LeaguePatternTurnaroundRate`/`LeaguePatternCount` olarak dolduruyor
+(bkz. yukarı "BİLGİ 1 / BİLGİ 4" bölümü), `OzetController` sadece bu hazır değeri
+rozete taşır. `LeaguePatternCount == 0` ise "veri yok" yazılır (Bilgi1/4 sayfasındaki
+"%0 ile n=0 karışmasın" kuralı burada da geçerli). **Kasıtlı olarak DOGİ/LİG FİKSTÜR
+rozetlerine ayrı bir "tutma/isabet oranı" eklenmedi** — kullanıcı sadece BİLGİ 1/4 için
+zaten var olan "bunların dönüş oranı" metriğinin yeterli olduğunu belirtti; her kaynak
+için ayrı bir oran hesabı icat etmeye gerek yok.
 
 ## Veri bütünlüğü — takım/lig/maç tekrarları (tekrar karşına çıkabilir, dikkat)
 

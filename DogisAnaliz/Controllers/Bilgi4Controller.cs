@@ -11,6 +11,9 @@ namespace DogisAnaliz.Controllers;
 /// Oynanmış maçlar <c>Matches</c>'ten, oynanmamış (aktif sezon) maçlar <c>FixtureSchedules</c>'ten
 /// gelir; desen ikisinin birleşiminde aranır. Henüz oynanmamış pivot maçlar "tahmin" olarak listelenir.
 /// Tanım için bkz. <see cref="Bilgi4ViewModel"/>.
+///
+/// Hesaplama mantığı <see cref="BuildAsync"/>'te STATIC — bkz. Bilgi1Controller'daki aynı not,
+/// <c>OzetController</c> bunu tekrar yazmadan çağırır.
 /// </summary>
 public class Bilgi4Controller : Controller
 {
@@ -28,21 +31,25 @@ public class Bilgi4Controller : Controller
         bool Played, bool Turn, string Ht, string Ft, string IyMs,
         DateTime Date, DateTime? Kickoff);
 
-    private sealed record ScanResult(
+    internal sealed record ScanResult(
         List<Bilgi4RowDto> Rows, List<Bilgi4RowDto> PendingRows,
         int EligiblePivotCount, int EligibleTurnaroundCount,
         int Bilgi4Count, int Bilgi4TurnaroundCount);
 
     public async Task<IActionResult> Index(int? leagueId, int? seasonId)
+        => View(await BuildAsync(_context, leagueId, seasonId));
+
+    /// <summary>Bilgi4Controller.Index'in tüm hesaplama mantığı — bkz. Bilgi1Controller.BuildAsync.</summary>
+    internal static async Task<Bilgi4ViewModel> BuildAsync(AppDbContext context, int? leagueId, int? seasonId)
     {
         var vm = new Bilgi4ViewModel { SelectedSeasonId = seasonId };
 
-        var leagueCounts = await _context.Matches.AsNoTracking()
+        var leagueCounts = await context.Matches.AsNoTracking()
             .GroupBy(m => m.LeagueId)
             .Select(g => new { LeagueId = g.Key, Count = g.Count() })
             .ToListAsync();
         var lids = leagueCounts.Select(x => x.LeagueId).ToList();
-        var leagueEntities = await _context.Leagues.AsNoTracking()
+        var leagueEntities = await context.Leagues.AsNoTracking()
             .Where(l => lids.Contains(l.Id)).ToListAsync();
 
         vm.Leagues = leagueEntities.Select(l => new Bilgi4LeagueDto
@@ -51,7 +58,7 @@ public class Bilgi4Controller : Controller
             MatchCount = leagueCounts.First(c => c.LeagueId == l.Id).Count
         }).OrderBy(l => l.Name).ToList();
 
-        if (vm.Leagues.Count == 0) return View(vm);
+        if (vm.Leagues.Count == 0) return vm;
 
         if (!leagueId.HasValue)
             leagueId = (vm.Leagues.FirstOrDefault(l => l.Name == "Premier League")
@@ -60,12 +67,12 @@ public class Bilgi4Controller : Controller
         vm.SelectedLeagueName = vm.Leagues.FirstOrDefault(l => l.Id == leagueId)?.Name ?? "Lig";
 
         // Sezon listesi: maçı OLAN + fikstür takvimi OLAN sezonlar
-        var matchSeasonIds = await _context.Matches.AsNoTracking()
+        var matchSeasonIds = await context.Matches.AsNoTracking()
             .Where(m => m.LeagueId == leagueId.Value).Select(m => m.SeasonId).Distinct().ToListAsync();
-        var schedSeasonIds = await _context.FixtureSchedules.AsNoTracking()
+        var schedSeasonIds = await context.FixtureSchedules.AsNoTracking()
             .Where(f => f.LeagueId == leagueId.Value).Select(f => f.SeasonId).Distinct().ToListAsync();
         var allSeasonIds = matchSeasonIds.Concat(schedSeasonIds).Distinct().ToList();
-        vm.Seasons = await _context.Seasons.AsNoTracking()
+        vm.Seasons = await context.Seasons.AsNoTracking()
             .Where(s => allSeasonIds.Contains(s.Id))
             .OrderByDescending(s => s.StartYear).ToListAsync();
 
@@ -74,7 +81,7 @@ public class Bilgi4Controller : Controller
             ? vm.Seasons.FirstOrDefault(s => s.Id == seasonId.Value)?.SeasonName ?? ""
             : "Tüm sezonlar";
 
-        var result = await ScanLeagueAsync(leagueId.Value, seasonId);
+        var result = await ScanLeagueAsync(context, leagueId.Value, seasonId);
         vm.Rows = result.Rows;
         vm.PendingRows = result.PendingRows;
         vm.EligiblePivotCount = result.EligiblePivotCount;
@@ -85,7 +92,7 @@ public class Bilgi4Controller : Controller
         // --- Tüm liglerde bekleyen tahminler (seçili ligden bağımsız) ---
         // Bkz. Bilgi1Controller — aynı gerekçe: seçili lig ne olursa olsun, önümüzdeki ~14 gün
         // içinde desen tutan hiçbir maç kaçırılmasın.
-        var activeSeason = await _context.Seasons.AsNoTracking()
+        var activeSeason = await context.Seasons.AsNoTracking()
             .FirstOrDefaultAsync(s => s.SeasonName == LeagueCatalog.ActiveSeasonName);
         if (activeSeason != null)
         {
@@ -95,28 +102,45 @@ public class Bilgi4Controller : Controller
             {
                 var r = lg.Id == leagueId.Value && seasonId == activeSeason.Id
                     ? result
-                    : await ScanLeagueAsync(lg.Id, activeSeason.Id);
+                    : await ScanLeagueAsync(context, lg.Id, activeSeason.Id);
 
-                foreach (var row in r.PendingRows)
+                var nearTerm = r.PendingRows
+                    .Where(row => row.KickoffUtc.HasValue && row.KickoffUtc.Value <= cutoff)
+                    .ToList();
+                if (nearTerm.Count == 0) continue;
+
+                // Oran sütunları TÜM ZAMANLARIN verisiyle (bkz. Bilgi1Controller — aynı gerekçe:
+                // sezon henüz birkaç hafta ilerlediyse aktif-sezon-bazlı oran neredeyse hep n=0).
+                var allTime = lg.Id == leagueId.Value && !seasonId.HasValue
+                    ? result
+                    : await ScanLeagueAsync(context, lg.Id, null);
+
+                double leagueBaseRate = allTime.EligiblePivotCount > 0
+                    ? Math.Round(100.0 * allTime.EligibleTurnaroundCount / allTime.EligiblePivotCount, 1) : 0;
+                double leaguePatternRate = allTime.Bilgi4Count > 0
+                    ? Math.Round(100.0 * allTime.Bilgi4TurnaroundCount / allTime.Bilgi4Count, 1) : 0;
+
+                foreach (var row in nearTerm)
                 {
-                    if (row.KickoffUtc.HasValue && row.KickoffUtc.Value <= cutoff)
-                    {
-                        row.LeagueName = lg.Name;
-                        crossLeague.Add(row);
-                    }
+                    row.LeagueName = lg.Name;
+                    row.LeagueBaseTurnaroundRate = leagueBaseRate;
+                    row.LeagueEligiblePivotCount = allTime.EligiblePivotCount;
+                    row.LeaguePatternTurnaroundRate = leaguePatternRate;
+                    row.LeaguePatternCount = allTime.Bilgi4Count;
+                    crossLeague.Add(row);
                 }
             }
             vm.CrossLeaguePending = crossLeague.OrderBy(r => r.KickoffUtc ?? DateTime.MaxValue).ToList();
         }
 
-        return View(vm);
+        return vm;
     }
 
     /// <summary>Tek bir lig+sezon (veya tüm sezonlar, seasonId=null) için BİLGİ 4 taramasını
     /// çalıştırır. Hem seçili-lig detay ekranı hem tüm-liglerde-bekleyenler digest'i bunu kullanır.</summary>
-    private async Task<ScanResult> ScanLeagueAsync(int leagueId, int? seasonId)
+    private static async Task<ScanResult> ScanLeagueAsync(AppDbContext context, int leagueId, int? seasonId)
     {
-        var mq = _context.Matches.AsNoTracking()
+        var mq = context.Matches.AsNoTracking()
             .Include(m => m.HomeTeam).Include(m => m.AwayTeam).Include(m => m.Surprise).Include(m => m.Season)
             .Where(m => m.LeagueId == leagueId);
         if (seasonId.HasValue) mq = mq.Where(m => m.SeasonId == seasonId.Value);
@@ -128,7 +152,7 @@ public class Bilgi4Controller : Controller
             m.Surprise != null ? m.Surprise.IyMsCode : "-",
             m.MatchDate, (DateTime?)null)).ToListAsync();
 
-        var fq = _context.FixtureSchedules.AsNoTracking()
+        var fq = context.FixtureSchedules.AsNoTracking()
             .Include(f => f.HomeTeam).Include(f => f.AwayTeam).Include(f => f.Season)
             .Where(f => f.LeagueId == leagueId);
         if (seasonId.HasValue) fq = fq.Where(f => f.SeasonId == seasonId.Value);

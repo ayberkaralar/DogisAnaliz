@@ -12,6 +12,10 @@ namespace DogisAnaliz.Controllers;
 /// gelir; henüz oynanmamış ama deseni tutan pivot maçlar "tahmin" olarak listelenir.
 /// Tetikleyici (X-Y dönüş maçı) yalnızca OYNANMIŞ maçlardan sayılır.
 /// Tanım için bkz. <see cref="Bilgi1ViewModel"/>.
+///
+/// Hesaplama mantığı <see cref="BuildAsync"/>'te STATIC — sadece bu controller'ın kendi
+/// action'ı değil, <c>OzetController</c> (Ana Sayfa özeti) de aynı taramayı (özellikle
+/// CrossLeaguePending'i) tekrar yazmadan buradan çağırır.
 /// </summary>
 public class Bilgi1Controller : Controller
 {
@@ -25,26 +29,32 @@ public class Bilgi1Controller : Controller
         bool Played, bool Turn, string Ht, string Ft, string IyMs,
         DateTime Date, DateTime? Kickoff);
 
-    private sealed record ScanResult(
+    internal sealed record ScanResult(
         List<Bilgi1RowDto> Rows, List<Bilgi1RowDto> PendingRows,
         int EligiblePivotCount, int EligibleTurnaroundCount,
         int Bilgi1Count, int Bilgi1TurnaroundCount);
 
     public async Task<IActionResult> Index(int? leagueId, int? seasonId)
+        => View(await BuildAsync(_context, leagueId, seasonId));
+
+    /// <summary>Bilgi1Controller.Index'in tüm hesaplama mantığı — controller'dan bağımsız,
+    /// OzetController da çağırabilsin diye static. leagueId=null verilirse iç varsayılan
+    /// (Premier Lig) kullanılır ama CrossLeaguePending YİNE DE tüm ligleri tarar.</summary>
+    internal static async Task<Bilgi1ViewModel> BuildAsync(AppDbContext context, int? leagueId, int? seasonId)
     {
         var vm = new Bilgi1ViewModel { SelectedSeasonId = seasonId };
 
-        var leagueCounts = await _context.Matches.AsNoTracking()
+        var leagueCounts = await context.Matches.AsNoTracking()
             .GroupBy(m => m.LeagueId).Select(g => new { LeagueId = g.Key, Count = g.Count() }).ToListAsync();
         var lids = leagueCounts.Select(x => x.LeagueId).ToList();
-        var leagueEntities = await _context.Leagues.AsNoTracking().Where(l => lids.Contains(l.Id)).ToListAsync();
+        var leagueEntities = await context.Leagues.AsNoTracking().Where(l => lids.Contains(l.Id)).ToListAsync();
 
         vm.Leagues = leagueEntities.Select(l => new Bilgi1LeagueDto
         {
             Id = l.Id, Name = l.Name, Country = l.Country,
             MatchCount = leagueCounts.First(c => c.LeagueId == l.Id).Count
         }).OrderBy(l => l.Name).ToList();
-        if (vm.Leagues.Count == 0) return View(vm);
+        if (vm.Leagues.Count == 0) return vm;
 
         if (!leagueId.HasValue)
             leagueId = (vm.Leagues.FirstOrDefault(l => l.Name == "Premier League")
@@ -52,12 +62,12 @@ public class Bilgi1Controller : Controller
         vm.SelectedLeagueId = leagueId;
         vm.SelectedLeagueName = vm.Leagues.FirstOrDefault(l => l.Id == leagueId)?.Name ?? "Lig";
 
-        var matchSeasonIds = await _context.Matches.AsNoTracking()
+        var matchSeasonIds = await context.Matches.AsNoTracking()
             .Where(m => m.LeagueId == leagueId.Value).Select(m => m.SeasonId).Distinct().ToListAsync();
-        var schedSeasonIds = await _context.FixtureSchedules.AsNoTracking()
+        var schedSeasonIds = await context.FixtureSchedules.AsNoTracking()
             .Where(f => f.LeagueId == leagueId.Value).Select(f => f.SeasonId).Distinct().ToListAsync();
         var allSeasonIds = matchSeasonIds.Concat(schedSeasonIds).Distinct().ToList();
-        vm.Seasons = await _context.Seasons.AsNoTracking()
+        vm.Seasons = await context.Seasons.AsNoTracking()
             .Where(s => allSeasonIds.Contains(s.Id)).OrderByDescending(s => s.StartYear).ToListAsync();
 
         vm.AllSeasons = !seasonId.HasValue;
@@ -65,7 +75,7 @@ public class Bilgi1Controller : Controller
             ? vm.Seasons.FirstOrDefault(s => s.Id == seasonId.Value)?.SeasonName ?? ""
             : "Tüm sezonlar";
 
-        var result = await ScanLeagueAsync(leagueId.Value, seasonId);
+        var result = await ScanLeagueAsync(context, leagueId.Value, seasonId);
         vm.Rows = result.Rows;
         vm.PendingRows = result.PendingRows;
         vm.EligiblePivotCount = result.EligiblePivotCount;
@@ -77,7 +87,7 @@ public class Bilgi1Controller : Controller
         // "Bu hafta Süper Lig'de desen tutan bir maç var ama ben Premier Lig'i açık tutuyorum,
         // hiç görmedim" şikayetine karşı: aktif sezonun tüm ligleri taranır, sadece önümüzdeki
         // ~14 gün içindeki bekleyen (henüz oynanmamış) satırlar toplanıp tek listede gösterilir.
-        var activeSeason = await _context.Seasons.AsNoTracking()
+        var activeSeason = await context.Seasons.AsNoTracking()
             .FirstOrDefaultAsync(s => s.SeasonName == LeagueCatalog.ActiveSeasonName);
         if (activeSeason != null)
         {
@@ -87,28 +97,47 @@ public class Bilgi1Controller : Controller
             {
                 var r = lg.Id == leagueId.Value && seasonId == activeSeason.Id
                     ? result // aynı lig+sezon zaten tarandıysa tekrar tarama
-                    : await ScanLeagueAsync(lg.Id, activeSeason.Id);
+                    : await ScanLeagueAsync(context, lg.Id, activeSeason.Id);
 
-                foreach (var row in r.PendingRows)
+                var nearTerm = r.PendingRows
+                    .Where(row => row.KickoffUtc.HasValue && row.KickoffUtc.Value <= cutoff)
+                    .ToList();
+                if (nearTerm.Count == 0) continue;
+
+                // Oran sütunları TÜM ZAMANLARIN verisiyle (sadece aktif sezonla değil) —
+                // sezon henüz birkaç hafta ilerlediyse aktif-sezon-bazlı oran neredeyse hep
+                // n=0 çıkar (anlamsız). Sadece gösterilecek satırı olan ligler için ek bir
+                // tarama yapılır (gereksiz tüm-lig maliyetinden kaçınmak için).
+                var allTime = lg.Id == leagueId.Value && !seasonId.HasValue
+                    ? result
+                    : await ScanLeagueAsync(context, lg.Id, null);
+
+                double leagueBaseRate = allTime.EligiblePivotCount > 0
+                    ? Math.Round(100.0 * allTime.EligibleTurnaroundCount / allTime.EligiblePivotCount, 1) : 0;
+                double leaguePatternRate = allTime.Bilgi1Count > 0
+                    ? Math.Round(100.0 * allTime.Bilgi1TurnaroundCount / allTime.Bilgi1Count, 1) : 0;
+
+                foreach (var row in nearTerm)
                 {
-                    if (row.KickoffUtc.HasValue && row.KickoffUtc.Value <= cutoff)
-                    {
-                        row.LeagueName = lg.Name;
-                        crossLeague.Add(row);
-                    }
+                    row.LeagueName = lg.Name;
+                    row.LeagueBaseTurnaroundRate = leagueBaseRate;
+                    row.LeagueEligiblePivotCount = allTime.EligiblePivotCount;
+                    row.LeaguePatternTurnaroundRate = leaguePatternRate;
+                    row.LeaguePatternCount = allTime.Bilgi1Count;
+                    crossLeague.Add(row);
                 }
             }
             vm.CrossLeaguePending = crossLeague.OrderBy(r => r.KickoffUtc ?? DateTime.MaxValue).ToList();
         }
 
-        return View(vm);
+        return vm;
     }
 
     /// <summary>Tek bir lig+sezon (veya tüm sezonlar, seasonId=null) için BİLGİ 1 taramasını
     /// çalıştırır. Hem seçili-lig detay ekranı hem tüm-liglerde-bekleyenler digest'i bunu kullanır.</summary>
-    private async Task<ScanResult> ScanLeagueAsync(int leagueId, int? seasonId)
+    private static async Task<ScanResult> ScanLeagueAsync(AppDbContext context, int leagueId, int? seasonId)
     {
-        var mq = _context.Matches.AsNoTracking()
+        var mq = context.Matches.AsNoTracking()
             .Include(m => m.HomeTeam).Include(m => m.AwayTeam).Include(m => m.Surprise).Include(m => m.Season)
             .Where(m => m.LeagueId == leagueId);
         if (seasonId.HasValue) mq = mq.Where(m => m.SeasonId == seasonId.Value);
@@ -120,7 +149,7 @@ public class Bilgi1Controller : Controller
             m.Surprise != null ? m.Surprise.IyMsCode : "-",
             m.MatchDate, (DateTime?)null)).ToListAsync();
 
-        var fq = _context.FixtureSchedules.AsNoTracking()
+        var fq = context.FixtureSchedules.AsNoTracking()
             .Include(f => f.HomeTeam).Include(f => f.AwayTeam).Include(f => f.Season)
             .Where(f => f.LeagueId == leagueId);
         if (seasonId.HasValue) fq = fq.Where(f => f.SeasonId == seasonId.Value);

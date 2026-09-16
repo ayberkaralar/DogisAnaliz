@@ -1,0 +1,162 @@
+@model DogisAnaliz.Models.OzetViewModel
+@{
+    ViewData["Title"] = "DogisAnaliz — Özet";
+}
+
+<style>
+    body { background:#0b1120; color:#e2e8f0; font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif; }
+    .oz { max-width:980px; margin:0 auto; padding:0 16px; }
+
+    .oz-head { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px; margin:22px 0 6px; }
+    .oz-head h4 { font-weight:800; letter-spacing:.5px; margin:0; }
+    .oz-head .sub { color:#94a3b8; font-size:.88rem; margin-top:2px; }
+
+    .oz-sync { background:#111c30; border:1px solid rgba(37,99,235,.35); border-radius:10px; padding:10px 14px; display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:16px; }
+    .oz-sync button { background:#2563eb; color:#fff; border:none; border-radius:7px; padding:7px 14px; font-weight:700; font-size:.85rem; cursor:pointer; }
+    .oz-sync button:hover { background:#1d4ed8; }
+
+    .oz-kpis { display:flex; gap:10px; flex-wrap:wrap; margin-bottom:18px; }
+    .oz-kpi { background:#131c2e; border:1px solid #223049; border-radius:10px; padding:8px 14px; font-size:.82rem; }
+    .oz-kpi b { font-size:1rem; }
+
+    .oz-note { color:#8ca0b8; font-size:.8rem; line-height:1.5; margin-bottom:18px; border-left:3px solid #2563eb; padding-left:12px; }
+
+    .oz-day { color:#64748b; font-size:.72rem; font-weight:800; text-transform:uppercase; letter-spacing:.08em; margin:18px 0 8px; padding-bottom:4px; border-bottom:1px solid #1c2740; }
+
+    .oz-card { background:#131c2e; border:1px solid #223049; border-radius:12px; padding:12px 16px; margin-bottom:8px; display:flex; align-items:center; gap:14px; flex-wrap:wrap; }
+    .oz-time { font-family:ui-monospace,Menlo,Consolas,monospace; color:#cbd5e1; font-size:.85rem; min-width:48px; }
+    .oz-lig { display:inline-block; background:#1e293b; color:#94a3b8; padding:3px 9px; border-radius:999px; font-size:.7rem; font-weight:700; white-space:nowrap; }
+    .oz-match { font-weight:700; color:#f8fafc; flex:1 1 220px; min-width:180px; }
+    .oz-match .vs { color:#64748b; font-weight:500; margin:0 4px; }
+    .oz-wk { color:#475569; font-size:.72rem; }
+    .oz-tags { display:flex; gap:6px; flex-wrap:wrap; }
+    .oz-tag { display:inline-block; padding:4px 10px; border-radius:7px; font-size:.72rem; font-weight:800; color:#0b1120; cursor:help; }
+    .empty { text-align:center; color:#64748b; padding:40px 0; }
+
+    .oz-section-gap { margin-top:36px; padding-top:22px; border-top:2px dashed #223049; }
+    .oz-gb-head { display:flex; align-items:center; gap:10px; margin-bottom:4px; }
+    .oz-gb-head h5 { font-weight:800; color:#7dd3f8; margin:0; }
+    .oz-gb-note { color:#8ca0b8; font-size:.8rem; margin-bottom:14px; }
+    .oz-gb-card { background:#0f1c2e; border:1px solid #1d4160; border-radius:12px; padding:10px 16px; margin-bottom:8px; display:flex; align-items:center; gap:14px; flex-wrap:wrap; }
+    .oz-gb-score { font-family:ui-monospace,Menlo,Consolas,monospace; color:#38bdf8; font-weight:800; font-size:.85rem; white-space:nowrap; }
+</style>
+
+<div class="oz">
+    <div class="oz-head">
+        <div>
+            <h4>⚡ Özet — Önümüzdeki ~2 Hafta</h4>
+            <div class="sub">@Model.WindowFrom.AddHours(3).ToString("dd.MM")–@Model.WindowTo.AddHours(3).ToString("dd.MM.yyyy")　·　5 analiz birlikte: BİLGİ 1, BİLGİ 4, DOGİ, Gol Beklentisi, Lig Fikstür</div>
+        </div>
+    </div>
+
+    <div class="oz-sync">
+        <span style="color:#93c5fd; font-weight:700; font-size:.85rem;">🔄 Senkronize Et</span>
+        <span style="color:#64748b; font-size:.8rem;">Aşağıdaki liste DB'deki güncel veriyle hesaplanır — en taze sonuç için önce senkronize et.</span>
+        <form method="post" action="/Sync/RefreshAllActive" style="margin-left:auto;"
+              onsubmit="var b=this.querySelector('button'); b.disabled=true; b.textContent='⏳ Güncelleniyor…';">
+            @Html.AntiForgeryToken()
+            <input type="hidden" name="returnUrl" value="@($"{Context.Request.Path}{Context.Request.QueryString}")" />
+            <button type="submit" onclick="return confirm('Tüm liglerin aktif sezon maçları güncellenecek. 15-30 saniye sürebilir. Devam edilsin mi?');">
+                Şimdi Senkronize Et
+            </button>
+        </form>
+    </div>
+
+    @if (TempData["SyncResult"] != null)
+    {
+        <div class="alert @(TempData["SyncResult"]!.ToString()!.StartsWith("✅") ? "alert-success" : "alert-danger") py-2 mb-3" style="font-size:0.85rem;">
+            @TempData["SyncResult"]
+        </div>
+    }
+
+    <div class="oz-kpis">
+        <div class="oz-kpi" style="color:#7dd3fc;">BİLGİ 1: <b>@Model.Bilgi1Count</b></div>
+        <div class="oz-kpi" style="color:#c4b5fd;">BİLGİ 4: <b>@Model.Bilgi4Count</b></div>
+        <div class="oz-kpi" style="color:#fbbf24;">DOGİ: <b>@Model.DogiCount</b></div>
+        <div class="oz-kpi" style="color:#38bdf8;">GOL BEKLENTİSİ: <b>@Model.GolBeklentisiCount</b></div>
+        <div class="oz-kpi" style="color:#f472b6;">LİG FİKSTÜR: <b>@Model.LigFiksturCount</b></div>
+    </div>
+
+    <div class="oz-note">
+        Her satır tek bir maç — o maçı hangi analiz(ler)in işaretlediği sağdaki renkli etiketlerden
+        anlaşılır (üzerine gelince detay çıkar). Bir maç birden fazla analizde çıkıyorsa TEK satırda
+        birleşik gösterilir. Detaylı tablo/oranlar için ilgili analiz sayfasına git — burası sadece
+        "kaçırma" özetidir, kendi başına yeni bir tahmin motoru değildir.
+    </div>
+
+    @if (Model.Matches.Count == 0)
+    {
+        <div class="empty">
+            Önümüzdeki ~2 hafta için hiçbir analizde bekleyen/takip edilecek maç bulunamadı.<br>
+            <span style="font-size:.85rem;">Fikstür verisi eksikse "Fikstür Takvimi" sayfasından senkronize etmen gerekebilir.</span>
+        </div>
+    }
+    else
+    {
+        string? lastDay = null;
+        foreach (var m in Model.Matches)
+        {
+            var day = m.KickoffTr.ToString("dddd, dd MMMM", new System.Globalization.CultureInfo("tr-TR"));
+            if (day != lastDay)
+            {
+                <div class="oz-day">@day</div>
+                lastDay = day;
+            }
+            <div class="oz-card">
+                <span class="oz-time">@m.KickoffTr.ToString("HH:mm")</span>
+                <span class="oz-lig">@LeagueDisplayHelper.ToTurkish(m.LeagueName)</span>
+                <span class="oz-match">
+                    @m.HomeTeam<span class="vs">–</span>@m.AwayTeam
+                    <span class="oz-wk">(@m.Week. hafta)</span>
+                </span>
+                <span class="oz-tags">
+                    @foreach (var t in m.Tags)
+                    {
+                        <span class="oz-tag" style="background:@t.Color;" title="@t.Detail">@t.Source@(string.IsNullOrEmpty(t.Short) ? "" : " · " + t.Short)</span>
+                    }
+                </span>
+            </div>
+        }
+    }
+
+    <div class="oz-section-gap">
+        <div class="oz-gb-head">
+            <h5>⚽ Gol Beklentisi — ayrı takip</h5>
+        </div>
+        <div class="oz-gb-note">
+            Bu liste yukarıdaki özete kasıtlı olarak karıştırılmaz — Gol Beklentisi ayrı bir
+            sinyal olduğu için ayrı takip edilir. Kovalar hakkında detay/kalibrasyon için
+            <a asp-controller="GolBeklentisi" asp-action="Index" style="color:#7dd3f8;">Gol Beklentisi sayfasına</a> git.
+        </div>
+
+        @if (Model.GolBeklentisiMatches.Count == 0)
+        {
+            <div class="empty">Önümüzdeki ~2 hafta için yüksek gol beklentili maç bulunamadı.</div>
+        }
+        else
+        {
+            string? lastGbDay = null;
+            foreach (var m in Model.GolBeklentisiMatches)
+            {
+                var day = m.KickoffTr.ToString("dddd, dd MMMM", new System.Globalization.CultureInfo("tr-TR"));
+                if (day != lastGbDay)
+                {
+                    <div class="oz-day">@day</div>
+                    lastGbDay = day;
+                }
+                <div class="oz-gb-card">
+                    <span class="oz-time">@m.KickoffTr.ToString("HH:mm")</span>
+                    <span class="oz-lig">@LeagueDisplayHelper.ToTurkish(m.LeagueName)</span>
+                    <span class="oz-match">
+                        @m.HomeTeam<span class="vs">–</span>@m.AwayTeam
+                        <span class="oz-wk">(@m.Week. hafta)</span>
+                    </span>
+                    @foreach (var t in m.Tags)
+                    {
+                        <span class="oz-gb-score" title="@t.Detail">@t.Short</span>
+                    }
+                </div>
+            }
+        }
+    </div>
+</div>

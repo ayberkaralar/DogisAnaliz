@@ -90,6 +90,8 @@
                     <tr>
                         <th>Lig</th><th>Hf</th><th>Tarih (TSİ)</th><th>Pivot Maç (A – B)</th>
                         <th>Tetikleyici: bir önceki hafta rakipleri → aralarındaki dönüş maçı</th>
+                        <th>Ligin genel dönüş oranı</th>
+                        <th>Bunların dönüş oranı</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -105,6 +107,15 @@
                                 <span class="arrow">→</span>
                                 <span>@($"H{r.TriggerWeek}")</span> <span class="res">@r.TriggerIyMs</span> (@r.TriggerFt)
                             </td>
+                            <td class="mono" style="color:#94a3b8;">%@r.LeagueBaseTurnaroundRate <span style="color:#64748b; font-size:.72rem;">(n=@r.LeagueEligiblePivotCount)</span></td>
+                            @if (r.LeaguePatternCount == 0)
+                            {
+                                <td class="mono" style="color:#64748b;" title="Bu sezon bu ligde henüz desenin tuttuğu ve oynanmış bir maç yok">veri yok</td>
+                            }
+                            else
+                            {
+                                <td class="mono" style="color:@(r.LeaguePatternTurnaroundRate > r.LeagueBaseTurnaroundRate + 3 ? "#4ade80" : r.LeaguePatternTurnaroundRate < r.LeagueBaseTurnaroundRate - 3 ? "#f87171" : "#fb923c");">%@r.LeaguePatternTurnaroundRate <span style="color:#64748b; font-size:.72rem;">(n=@r.LeaguePatternCount)</span></td>
+                            }
                         </tr>
                     }
                 </tbody>
